@@ -3823,7 +3823,11 @@ def initialize_database():
         db.session.commit()
 
 
+# Initialize the database whenever the application is imported by Gunicorn/Render.
+# Gunicorn does not execute the __main__ block, so database tables and the default
+# admin account must be created during application startup/import.
+initialize_database()
+
 if __name__ == "__main__":
-    initialize_database()
     app.run(debug=True)
 
