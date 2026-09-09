@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Employee Profile</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+<div class="sidebar">
+    <div class="brand-logo"><img src="{{ url_for('static', filename='logo.png') }}" alt="UNITY PATH RECOVERY AND COLLECTION SERVICES OPC"></div>
+    <a href="{{ url_for('dashboard') }}">Dashboard</a>
+    <a href="{{ url_for('employees') }}">Employees</a>
+    <a href="{{ url_for('attendance') }}">Attendance</a>
+    <a href="{{ url_for('calendar_view') }}">Calendar</a>
+    <a href="{{ url_for('payroll') }}">Payroll</a>
+    <a href="{{ url_for('loans') }}">Loan Management</a>
+    <a href="{{ url_for('loan_report') }}">Loan Report</a>
+    <a href="{{ url_for('payroll_settings') }}">Payroll Settings</a>
+    <a href="{{ url_for('payroll_contributions') }}">Contribution Shares</a>
+    <a href="{{ url_for('thirteenth_month_report') }}">13th Month</a>
+    <a href="{{ url_for('logout') }}">Logout</a>
+</div>
+
+<div class="main">
+    <div class="page-header">
+        <div>
+            <h1>{{ employee.first_name }} {{ employee.middle_name or '' }} {{ employee.last_name }}</h1>
+            <p>{{ employee.employee_id }} · {{ employee.position or "—" }}</p>
+        </div>
+        <div>
+            <a class="btn" href="{{ url_for('edit_employee', id=employee.id) }}">Edit</a>
+            {% if employee.employment_status != 'Active' %}
+                <a class="btn primary" href="{{ url_for('final_pay', id=employee.id) }}">Final Pay</a>
+            {% endif %}
+            {% if not employee.user_account %}
+                <a class="btn primary" href="{{ url_for('create_employee_account', id=employee.id) }}">Create Account</a>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="profile-header card">
+        {% if employee.profile_photo %}
+            <img class="photo-2x2" src="{{ url_for('static', filename='uploads/profiles/' + employee.profile_photo) }}">
+        {% else %}
+            <div class="photo-2x2 placeholder">2x2</div>
+        {% endif %}
+        <div>
+            <h2>{{ employee.first_name }} {{ employee.last_name }}</h2>
+            <p>{{ employee.department or "No department" }} · {{ employee.position or "No position" }}</p>
+            <span class="badge">{{ employee.employment_status }}</span>
+        </div>
+    </div>
+
+    <div class="two-column">
+        <div class="card">
+            <h2>Personal Information</h2>
+            <p><b>Email:</b> {{ employee.email or "—" }}</p>
+            <p><b>Phone:</b> {{ employee.phone or "—" }}</p>
+            <p><b>Address:</b> {{ employee.address or "—" }}</p>
+            <p><b>Date Hired:</b> {{ employee.date_hired.strftime('%B %d, %Y') if employee.date_hired else "—" }}</p>
+            <p><b>Basic Daily Rate:</b> ₱{{ "{:,.2f}".format(employee.daily_rate or 0) }}</p>
+            <p><b>Separation Date:</b> {{ employee.separation_date.strftime('%B %d, %Y') if employee.separation_date else "—" }}</p>
+            <p><b>Separation Type:</b> {{ employee.separation_type or "—" }}</p>
+        </div>
+
+        <div class="card">
+            <h2>Government Requirements</h2>
+            <p><b>SSS:</b> {{ employee.sss_number or "—" }}</p>
+            <p><b>PhilHealth:</b> {{ employee.philhealth_number or "—" }}</p>
+            <p><b>Pag-IBIG:</b> {{ employee.pagibig_number or "—" }}</p>
+            <p><b>TIN:</b> {{ employee.tin_number or "—" }}</p>
+            <p><b>UMID:</b> {{ employee.umid_number or "—" }}</p>
+        </div>
+
+        <div class="card">
+            <h2>Bank / Payroll</h2>
+            <p><b>Bank:</b> {{ employee.bank_name or "—" }}</p>
+            <p><b>Account Name:</b> {{ employee.bank_account_name or "—" }}</p>
+            <p><b>Account Number:</b> {{ employee.bank_account_number or "—" }}</p>
+        </div>
+
+        <div class="card">
+            <h2>Emergency Contact</h2>
+            <p><b>Name:</b> {{ employee.emergency_name or "—" }}</p>
+            <p><b>Relationship:</b> {{ employee.emergency_relationship or "—" }}</p>
+            <p><b>Phone:</b> {{ employee.emergency_phone or "—" }}</p>
+            <p><b>Address:</b> {{ employee.emergency_address or "—" }}</p>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Recent Attendance</h2>
+        <div class="table-container">
+            <table>
+                <thead><tr><th>Date</th><th>Time In</th><th>Time Out</th><th>Hours</th><th>Late</th><th>Undertime</th><th>OT</th></tr></thead>
+                <tbody>
+                {% for r in attendance %}
+                    <tr>
+                        <td>{{ r.attendance_date.strftime('%b %d, %Y') }}</td>
+                        <td>{{ r.time_in.strftime('%I:%M %p') if r.time_in else "—" }}</td>
+                        <td>{{ r.time_out.strftime('%I:%M %p') if r.time_out else "—" }}</td>
+                        <td>{{ "%.2f"|format(r.total_hours or 0) }}</td>
+                        <td>{{ "%.2f"|format(r.late_hours or 0) }}</td>
+                        <td>{{ "%.2f"|format(r.undertime_hours or 0) }}</td>
+                        <td>{{ "%.2f"|format(r.overtime_hours or 0) }}</td>
+                    </tr>
+                {% else %}
+                    <tr><td colspan="7">No attendance records.</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+</body>
+</html>

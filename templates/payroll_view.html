@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Payroll Details</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+<div class="sidebar">
+    <div class="brand-logo"><img src="{{ url_for('static', filename='logo.png') }}" alt="UNITY PATH RECOVERY AND COLLECTION SERVICES OPC"></div>
+    <a href="{{ url_for('dashboard') }}">Dashboard</a>
+    <a href="{{ url_for('employees') }}">Employees</a>
+    <a href="{{ url_for('attendance') }}">Attendance</a>
+    <a href="{{ url_for('calendar_view') }}">Calendar</a>
+    <a href="{{ url_for('payroll') }}">Payroll</a>
+    <a href="{{ url_for('loans') }}">Loan Management</a>
+    <a href="{{ url_for('loan_report') }}">Loan Report</a>
+    <a href="{{ url_for('payroll_settings') }}">Payroll Settings</a>
+    <a href="{{ url_for('payroll_contributions') }}">Contribution Shares</a>
+    <a href="{{ url_for('thirteenth_month_report') }}">13th Month</a>
+    <a href="{{ url_for('logout') }}">Logout</a>
+</div>
+<div class="main">
+    <div class="page-header">
+        <div><h1>Payroll Details</h1><p>{{ payroll.employee.first_name }} {{ payroll.employee.last_name }} · {{ payroll.employee.employee_id }}</p></div>
+        <div>
+            <a class="btn" href="{{ url_for('admin_payslip', id=payroll.id) }}">Payslip</a>
+            {% if payroll.status != "Paid" %}
+            <a class="btn primary" href="{{ url_for('edit_payroll', id=payroll.id) }}">Edit Payroll</a>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="card">
+        <p><b>Period:</b> {{ payroll.period_start.strftime('%B %d, %Y') }} – {{ payroll.period_end.strftime('%B %d, %Y') }}</p>
+        <p><b>Status:</b> <span class="badge">{{ payroll.status }}</span></p>
+        {% if payroll.status == "Draft" %}
+            <form method="POST" action="{{ url_for('approve_payroll', id=payroll.id) }}" class="inline">
+                <button class="btn primary" type="submit">Approve</button>
+            </form>
+        {% elif payroll.status == "Approved" %}
+            <form method="POST" action="{{ url_for('mark_payroll_paid', id=payroll.id) }}" class="inline">
+                <button class="btn primary" type="submit">Mark as Paid</button>
+            </form>
+        {% endif %}
+    </div>
+
+    <div class="two-column">
+        <div class="card">
+            <h2>Attendance Summary</h2>
+            <table>
+                <tr><td>Worked Days</td><td>{{ payroll.worked_days or 0 }} day(s)</td></tr>
+                <tr><td>Absences</td><td>{{ payroll.absent_days or 0 }} day(s)</td></tr>
+                <tr><td>Leave With Pay</td><td>{{ payroll.leave_with_pay_days or 0 }} day(s)</td></tr>
+                <tr><td>Leave Without Pay</td><td>{{ payroll.leave_without_pay_days or 0 }} day(s)</td></tr>
+                <tr><td>Regular Paid Hours</td><td>{{ "%.2f"|format(payroll.regular_hours or 0) }}</td></tr>
+                <tr><td>Late Hours</td><td>{{ "%.2f"|format(payroll.late_hours or 0) }}</td></tr>
+                <tr><td>Undertime Hours</td><td>{{ "%.2f"|format(payroll.undertime_hours or 0) }}</td></tr>
+                <tr><td>Approved Overtime Hours</td><td>{{ "%.2f"|format(payroll.overtime_hours or 0) }}</td></tr>
+            </table>
+
+            <h2>Earnings</h2>
+            <table>
+                <tr><td>Basic Pay (worked days × daily rate)</td><td>₱{{ "{:,.2f}".format(payroll.basic_pay or 0) }}</td></tr>
+                <tr><td>Late Deduction</td><td>₱{{ "{:,.2f}".format(payroll.late_deduction or 0) }}</td></tr>
+                <tr><td>Undertime Deduction</td><td>₱{{ "{:,.2f}".format(payroll.undertime_deduction or 0) }}</td></tr>
+                <tr><td>Sunday Rest Day Premium</td><td>₱{{ "{:,.2f}".format(payroll.rest_day_premium or 0) }}</td></tr>
+                <tr><td>Holiday Pay / Premium</td><td>₱{{ "{:,.2f}".format(payroll.holiday_pay or 0) }}</td></tr>
+                <tr><td>Approved OT Pay</td><td>₱{{ "{:,.2f}".format(payroll.overtime_pay or 0) }}</td></tr>
+                <tr><td>Allowance (daily × worked days)</td><td>₱{{ "{:,.2f}".format(payroll.allowance or 0) }}</td></tr>
+                <tr><td>Incentive (daily × worked days)</td><td>₱{{ "{:,.2f}".format(payroll.incentive or 0) }}</td></tr>
+                <tr class="total-row"><td><b>Gross Pay</b></td><td><b>₱{{ "{:,.2f}".format(payroll.gross_pay or 0) }}</b></td></tr>
+            </table>
+<div class="info-box">Attendance summary is based on the payroll period. Absences are scheduled Monday-Friday dates with no valid attendance record and no Calendar holiday. Saturday is optional work at regular rate; Sunday is the official rest day. OT is paid only when approved by Admin.</div>
+
+        </div>
+        <div class="card">
+            <h2>Deductions</h2>
+            <table>
+                {% if contribution %}
+                <tr><td colspan="2"><b>September Monthly Mandatory Contributions</b></td></tr>
+                {% endif %}
+                <tr><td>SSS</td><td>₱{{ "{:,.2f}".format(payroll.sss or 0) }}</td></tr>
+                <tr><td>PhilHealth</td><td>₱{{ "{:,.2f}".format(payroll.philhealth or 0) }}</td></tr>
+                <tr><td>Pag-IBIG</td><td>₱{{ "{:,.2f}".format(payroll.pagibig or 0) }}</td></tr>
+                {% if contribution %}
+                <tr><td>Monthly Employee Share Due</td><td>₱{{ "{:,.2f}".format((contribution.sss_due or 0) + (contribution.philhealth_due or 0) + (contribution.pagibig_due or 0)) }}</td></tr>
+                <tr><td>Monthly Employee Share Uncollected</td><td>₱{{ "{:,.2f}".format((contribution.sss_uncollected or 0) + (contribution.philhealth_uncollected or 0) + (contribution.pagibig_uncollected or 0)) }}</td></tr>
+                {% endif %}
+                <tr><td>Withholding Tax</td><td>₱{{ "{:,.2f}".format(payroll.withholding_tax or 0) }}</td></tr>
+                <tr><td colspan="2"><b>Government Loan Deductions</b></td></tr>
+                <tr><td>SSS Salary Loan</td><td>₱{{ "{:,.2f}".format(payroll.loan_sss_salary or 0) }}</td></tr>
+                <tr><td>SSS Calamity Loan</td><td>₱{{ "{:,.2f}".format(payroll.loan_sss_calamity or 0) }}</td></tr>
+                <tr><td>Pag-IBIG MPL</td><td>₱{{ "{:,.2f}".format(payroll.loan_pagibig_mpl or 0) }}</td></tr>
+                <tr><td>Pag-IBIG Calamity Loan</td><td>₱{{ "{:,.2f}".format(payroll.loan_pagibig_calamity or 0) }}</td></tr>
+                <tr><td><b>Total Government Loan</b></td><td><b>₱{{ "{:,.2f}".format(payroll.loan or 0) }}</b></td></tr>
+                                <tr><td>Other Deduction</td><td>₱{{ "{:,.2f}".format(payroll.other_deduction or 0) }}</td></tr>
+                <tr><td>Adjustment Addition</td><td>₱{{ "{:,.2f}".format(payroll.adjustment_addition or 0) }}</td></tr>
+                <tr><td>Adjustment Deduction</td><td>₱{{ "{:,.2f}".format(payroll.adjustment_deduction or 0) }}</td></tr>
+                <tr class="total-row"><td><b>Total Deductions</b></td><td><b>₱{{ "{:,.2f}".format(payroll.total_deductions or 0) }}</b></td></tr>
+            </table>
+        </div>
+    </div>
+
+    {% if payroll.adjustment_note %}
+    <div class="info-box"><b>Adjustment Note:</b> {{ payroll.adjustment_note }}</div>
+    {% endif %}
+    <div class="net-pay-box">NET PAY <strong>₱{{ "{:,.2f}".format(payroll.net_pay or 0) }}</strong></div>
+
+    <form method="POST" action="{{ url_for('delete_payroll', id=payroll.id) }}" onsubmit="return confirm('Delete this payroll, including linked contribution/loan payment records?');">
+        <button class="btn danger" type="submit">Delete Payroll</button>
+    </form>
+</div>
+</body>
+</html>

@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8"><title>Leave Requests</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+<style>.status-pending{font-weight:700}.status-approved{font-weight:700}.status-rejected{font-weight:700}.action-form{display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap}.remarks{width:180px;min-height:34px}</style>
+</head>
+<body>
+<div class="sidebar">
+<div class="brand-logo"><img src="{{ url_for('static', filename='logo.png') }}" alt="UNITY PATH RECOVERY AND COLLECTION SERVICES OPC"></div>
+<a href="{{ url_for('dashboard') }}">Dashboard</a>
+<a href="{{ url_for('employees') }}">Employees</a>
+<a href="{{ url_for('attendance') }}">Attendance</a>
+<a href="{{ url_for('calendar_view') }}">Calendar</a>
+<a href="{{ url_for('admin_leave_requests') }}">Leave Requests{% if pending_count %} ({{ pending_count }}){% endif %}</a>
+<a href="{{ url_for('payroll') }}">Payroll</a>
+<a href="{{ url_for('loans') }}">Loan Management</a>
+<a href="{{ url_for('loan_report') }}">Loan Report</a>
+<a href="{{ url_for('payroll_settings') }}">Payroll Settings</a>
+<a href="{{ url_for('payroll_contributions') }}">Contribution Shares</a>
+<a href="{{ url_for('thirteenth_month_report') }}">13th Month</a>
+<a href="{{ url_for('logout') }}">Logout</a>
+</div>
+<div class="main">
+<div class="page-header"><div><h1>Leave Requests</h1><p>Approve or reject employee VL/SL requests. Approval automatically creates VL/SL attendance records.</p></div></div>
+{% with messages = get_flashed_messages(with_categories=true) %}{% for category,message in messages %}<div class="alert {{ category }}">{{ message }}</div>{% endfor %}{% endwith %}
+<div class="card"><div class="actions"><a class="btn {{ 'primary' if selected_status=='All' else '' }}" href="{{ url_for('admin_leave_requests', status='All') }}">All</a><a class="btn {{ 'primary' if selected_status=='Pending' else '' }}" href="{{ url_for('admin_leave_requests', status='Pending') }}">Pending{% if pending_count %} ({{ pending_count }}){% endif %}</a><a class="btn {{ 'primary' if selected_status=='Approved' else '' }}" href="{{ url_for('admin_leave_requests', status='Approved') }}">Approved</a><a class="btn {{ 'primary' if selected_status=='Rejected' else '' }}" href="{{ url_for('admin_leave_requests', status='Rejected') }}">Rejected</a></div></div>
+<div class="card table-container">
+<table><thead><tr><th>Employee</th><th>Type</th><th>Period</th><th>Leave Days</th><th>Reason</th><th>Status</th><th>Action</th></tr></thead><tbody>
+{% for r in leave_requests %}
+
+<tr>
+<td><b>{{ r.employee.first_name }} {{ r.employee.last_name }}</b><br><small>{{ r.employee.employee_id }}</small></td>
+<td>{% if r.leave_type == "VL" %}Vacation Leave (VL){% elif r.leave_type == "SL" %}Sick Leave (SL){% else %}{{ r.leave_type }}{% endif %}</td><td>{{ r.start_date.strftime('%b %d, %Y') }} – {{ r.end_date.strftime('%b %d, %Y') }}</td><td>{{ leave_request_day_count(r.start_date, r.end_date) }}</td><td>{{ r.reason or '—' }}</td><td class="status-{{ r.status|lower }}">{{ r.status }}</td>
+<td>
+{% if r.status == 'Pending' %}
+<form method="POST" action="{{ url_for('approve_leave_request', id=r.id) }}" class="action-form"><input class="remarks" name="admin_remarks" placeholder="Approval remarks"><button class="btn small primary" type="submit">Approve</button></form>
+<form method="POST" action="{{ url_for('reject_leave_request', id=r.id) }}" class="action-form"><input class="remarks" name="admin_remarks" placeholder="Rejection reason"><button class="btn small danger" type="submit">Reject</button></form>
+{% else %}{{ r.admin_remarks or '—' }}{% endif %}
+</td></tr>
+{% else %}<tr><td colspan="7">No leave requests found.</td></tr>{% endfor %}
+</tbody></table></div>
+</div></body></html>

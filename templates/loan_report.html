@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Loan Report</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+<div class="sidebar">
+    <div class="brand-logo"><img src="{{ url_for('static', filename='logo.png') }}" alt="UNITY PATH RECOVERY AND COLLECTION SERVICES OPC"></div>
+    <a href="{{ url_for('dashboard') }}">Dashboard</a>
+    <a href="{{ url_for('employees') }}">Employees</a>
+    <a href="{{ url_for('attendance') }}">Attendance</a>
+    <a href="{{ url_for('calendar_view') }}">Calendar</a>
+<a href="{{ url_for('admin_leave_requests') }}">Leave Requests</a>
+    <a href="{{ url_for('payroll') }}">Payroll</a>
+    <a href="{{ url_for('loans') }}">Loan Management</a>
+    <a href="{{ url_for('loan_report') }}">Loan Report</a>
+    <a href="{{ url_for('payroll_settings') }}">Payroll Settings</a>
+    <a href="{{ url_for('payroll_contributions') }}">Contribution Shares</a>
+    <a href="{{ url_for('thirteenth_month_report') }}">13th Month</a>
+    <a href="{{ url_for('logout') }}">Logout</a>
+</div>
+<div class="main">
+    <div class="page-header">
+        <div><h1>Loan Report</h1><p>Government loan deductions and balances for company remittance.</p></div>
+        <a class="btn primary" href="{{ url_for('add_loan') }}">+ Add Loan</a>
+    </div>
+
+    <div class="card">
+        <div class="info-box">
+            <b>Company Remittance</b> shows loans that the company needs to remit/pay to the relevant loan provider
+            based on recorded payroll deductions. Company/internal loans can be marked "No".
+            A loan payment is recorded only when the related payroll is marked <b>Paid</b>.
+        </div>
+        <div class="form-grid">
+            <div><b>Total Original Loans</b><br>₱{{ "{:,.2f}".format(totals.original) }}</div>
+            <div><b>Total Remaining Balance</b><br>₱{{ "{:,.2f}".format(totals.balance) }}</div>
+            <div><b>Total Recorded Payments</b><br>₱{{ "{:,.2f}".format(totals.paid) }}</div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>By Loan Type</h2>
+        <table>
+            <thead><tr><th>Loan Type</th><th>Recorded Payments / Remittance</th><th>Remaining Balance</th></tr></thead>
+            <tbody>
+            {% for loan_type in loan_types %}
+                <tr>
+                    <td>{{ loan_type }}</td>
+                    <td>₱{{ "{:,.2f}".format(type_totals.get(loan_type, {}).get("deducted", 0)) }}</td>
+                    <td>₱{{ "{:,.2f}".format(type_totals.get(loan_type, {}).get("balance", 0)) }}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="card table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Employee</th><th>Loan Type</th><th>Reference</th>
+                    <th>Original</th><th>Paid / Recorded</th><th>Remaining</th>
+                    <th>Deduction / Payroll</th><th>Provider</th><th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for r in rows %}
+                <tr>
+                    <td><b>{{ r.loan.employee.first_name }} {{ r.loan.employee.last_name }}</b><br><small>{{ r.loan.employee.employee_id }}</small></td>
+                    <td>{{ r.loan.loan_type }}</td>
+                    <td>{{ r.loan.reference_no or '—' }}</td>
+                    <td>₱{{ "{:,.2f}".format(r.loan.original_amount or 0) }}</td>
+                    <td>₱{{ "{:,.2f}".format(r.paid) }}</td>
+                    <td>₱{{ "{:,.2f}".format(r.remaining) }}</td>
+                    <td>₱{{ "{:,.2f}".format(r.loan.deduction_per_payroll or 0) }}</td>
+                    <td>{{ "SSS" if r.loan.loan_type.startswith("SSS") else "Pag-IBIG" }}</td>
+                    <td><span class="badge">{{ r.loan.status }}</span></td>
+                </tr>
+            {% else %}
+                <tr><td colspan="9">No loans recorded.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+</body>
+</html>

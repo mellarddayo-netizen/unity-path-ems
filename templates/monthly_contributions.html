@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monthly Contributions</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+<div class="sidebar">
+    <div class="brand-logo"><img src="{{ url_for('static', filename='logo.png') }}" alt="UNITY PATH RECOVERY AND COLLECTION SERVICES OPC"></div>
+    <a href="{{ url_for('dashboard') }}">Dashboard</a>
+    <a href="{{ url_for('employees') }}">Employees</a>
+    <a href="{{ url_for('attendance') }}">Attendance</a>
+    <a href="{{ url_for('calendar_view') }}">Calendar</a>
+    <a href="{{ url_for('payroll') }}">Payroll</a>
+    <a href="{{ url_for('monthly_contributions') }}">Monthly Contributions</a>
+    <a href="{{ url_for('payroll_settings') }}">Payroll Settings</a>
+    <a href="{{ url_for('logout') }}">Logout</a>
+</div>
+<div class="main">
+    <div class="page-header">
+        <div>
+            <h1>Monthly Government Contributions</h1>
+            <p>{{ "%02d"|format(month) }}/{{ year }} — statutory obligations are monthly, not per cutoff.</p>
+        </div>
+        <a class="btn" href="{{ url_for('payroll_contributions') }}">Contribution Shares</a>
+    </div>
+
+    <div class="card">
+        <form method="GET" class="form-grid">
+            <div class="form-group">
+                <label>Year</label>
+                <input type="number" name="year" value="{{ year }}" min="2000" max="2100">
+            </div>
+            <div class="form-group">
+                <label>Month</label>
+                <input type="number" name="month" value="{{ month }}" min="1" max="12">
+            </div>
+            <div class="form-group" style="align-self:end">
+                <button class="btn btn-success" type="submit">View Month</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="card">
+        <h2>Employee Shares</h2>
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Employee</th>
+                        <th>SSS Due</th>
+                        <th>PhilHealth Due</th>
+                        <th>Pag-IBIG Due</th>
+                        <th>Collected</th>
+                        <th>Uncollected</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for row in rows %}
+                    {% set due = row.sss_due + row.philhealth_due + row.pagibig_due %}
+                    {% set collected = row.sss_collected + row.philhealth_collected + row.pagibig_collected %}
+                    {% set uncollected = row.sss_uncollected + row.philhealth_uncollected + row.pagibig_uncollected %}
+                    <tr>
+                        <td>{{ row.employee.first_name }} {{ row.employee.last_name }}</td>
+                        <td>₱{{ "{:,.2f}".format(row.sss_due) }}</td>
+                        <td>₱{{ "{:,.2f}".format(row.philhealth_due) }}</td>
+                        <td>₱{{ "{:,.2f}".format(row.pagibig_due) }}</td>
+                        <td>₱{{ "{:,.2f}".format(collected) }}</td>
+                        <td><strong>₱{{ "{:,.2f}".format(uncollected) }}</strong></td>
+                        <td><span class="badge">{{ row.status }}</span></td>
+                    </tr>
+                {% else %}
+                    <tr><td colspan="7">No monthly contribution records for this month yet.</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="two-column">
+        <div class="card">
+            <h2>Employee Totals</h2>
+            <p>Monthly Due: <strong>₱{{ "{:,.2f}".format(totals.employee_due_total) }}</strong></p>
+            <p>Actually Collected: <strong>₱{{ "{:,.2f}".format(totals.employee_collected_total) }}</strong></p>
+            <p>Uncollected Balance: <strong>₱{{ "{:,.2f}".format(totals.employee_uncollected_total) }}</strong></p>
+        </div>
+        <div class="card">
+            <h2>Company Share</h2>
+            <p>SSS + EC: ₱{{ "{:,.2f}".format(totals.sss_employer) }}</p>
+            <p>PhilHealth: ₱{{ "{:,.2f}".format(totals.philhealth_employer) }}</p>
+            <p>Pag-IBIG: ₱{{ "{:,.2f}".format(totals.pagibig_employer) }}</p>
+            <p><strong>Total Company Share: ₱{{ "{:,.2f}".format(totals.company_total) }}</strong></p>
+        </div>
+    </div>
+</div>
+</body>
+</html>

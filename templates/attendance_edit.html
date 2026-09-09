@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Edit Attendance</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+<div class="sidebar">
+    <div class="brand-logo"><img src="{{ url_for('static', filename='logo.png') }}" alt="UNITY PATH RECOVERY AND COLLECTION SERVICES OPC"></div>
+    <a href="{{ url_for('dashboard') }}">Dashboard</a>
+    <a href="{{ url_for('employees') }}">Employees</a>
+    <a href="{{ url_for('attendance') }}">Attendance</a>
+    <a href="{{ url_for('calendar_view') }}">Calendar</a>
+    <a href="{{ url_for('payroll') }}">Payroll</a>
+    <a href="{{ url_for('loans') }}">Loan Management</a>
+    <a href="{{ url_for('loan_report') }}">Loan Report</a>
+    <a href="{{ url_for('logout') }}">Logout</a>
+</div>
+<div class="main">
+    <div class="card narrow">
+        <h1>Edit Attendance</h1>
+        <p><b>{{ record.employee.first_name }} {{ record.employee.last_name }}</b></p>
+        <form method="POST">
+            <label>Date</label>
+            <input type="date" name="attendance_date" value="{{ record.attendance_date.isoformat() }}" required>
+
+            <label>Time In</label>
+            <input type="datetime-local" name="time_in" value="{{ record.time_in.strftime('%Y-%m-%dT%H:%M') if record.time_in else '' }}">
+
+            <label>Time Out</label>
+            <input type="datetime-local" name="time_out" value="{{ record.time_out.strftime('%Y-%m-%dT%H:%M') if record.time_out else '' }}">
+
+            <label>Attendance / Leave Status</label>
+            <select name="status">
+                <option value="Present" {{ 'selected' if record.status == 'Present' else '' }}>Present</option>
+                <option value="VL" {{ 'selected' if record.status == 'VL' else '' }}>VL — Vacation Leave</option>
+                <option value="SL" {{ 'selected' if record.status == 'SL' else '' }}>SL — Sick Leave</option>
+            </select>
+            <small>For VL/SL, leave Time In and Time Out blank. VL/SL are paid leave days and will use the employee's saved entitlement.</small>
+
+            <div class="info-box">
+                Saving will automatically recalculate Total Hours, Late, Undertime and Overtime.
+            </div>
+
+            <div class="actions">
+                <a class="btn" href="{{ url_for('attendance', date=record.attendance_date.isoformat()) }}">Cancel</a>
+                <button class="btn primary" type="submit">Save Changes</button>
+            </div>
+        </form>
+    </div>
+</div>
+</body>
+</html>

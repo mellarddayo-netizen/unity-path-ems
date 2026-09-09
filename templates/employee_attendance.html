@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>My Attendance</title>
+    <style>.status-invalid { font-weight:700; color:#b91c1c; background:#fee2e2; padding:3px 7px; border-radius:5px; }</style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+<div class="sidebar">
+    <div class="brand-logo"><img src="{{ url_for('static', filename='logo.png') }}" alt="UNITY PATH RECOVERY AND COLLECTION SERVICES OPC"></div>
+    <a href="{{ url_for('employee_dashboard') }}">Dashboard</a>
+    <a href="{{ url_for('employee_self_profile') }}">My Profile</a>
+    <a href="{{ url_for('employee_attendance') }}">My Attendance</a>
+<a href="{{ url_for('employee_leave_requests') }}">Leave Requests</a>
+    <a href="{{ url_for('employee_payroll') }}">My Payroll</a>
+    <a href="{{ url_for('logout') }}">Logout</a>
+</div>
+<div class="main">
+    <h1>My Attendance</h1>
+    <div class="card table-container">
+        <table>
+            <thead><tr><th>Date</th><th>Time In</th><th>Time Out</th><th>Hours</th><th>Late</th><th>Undertime</th><th>OT</th><th>Status</th></tr></thead>
+            <tbody>
+            {% for r in attendance %}
+                <tr>
+                    <td>{{ r.attendance_date.strftime('%b %d, %Y') }}</td>
+                    <td>{{ r.time_in.strftime('%I:%M %p') if r.time_in else "—" }}</td>
+                    <td>{{ r.time_out.strftime('%I:%M %p') if r.time_out else "—" }}</td>
+                    <td>{{ "%.2f"|format(r.total_hours or 0) }}</td>
+                    <td>{{ "%.2f"|format(r.late_hours or 0) }}</td>
+                    <td>{{ "%.2f"|format(r.undertime_hours or 0) }}</td>
+                    <td>{{ "%.2f"|format(r.overtime_hours or 0) }}</td>
+                    <td>{% if r.status == "Invalid Out" %}<span class="status-invalid">INVALID OUT</span>{% elif r.status == "VL" %}Vacation Leave (VL){% elif r.status == "SL" %}Sick Leave (SL){% else %}{{ r.status }}{% endif %}</td>
+                </tr>
+            {% else %}
+                <tr><td colspan="8">No attendance records yet.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+</body>
+</html>

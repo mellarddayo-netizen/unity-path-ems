@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>Generate Final Pay</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}"></head>
+<body>
+<div class="sidebar">
+<div class="brand-logo"><img src="{{ url_for('static', filename='logo.png') }}" alt="UNITY PATH RECOVERY AND COLLECTION SERVICES OPC"></div>
+<a href="{{ url_for('dashboard') }}">Dashboard</a>
+<a href="{{ url_for('employees') }}">Employees</a>
+<a href="{{ url_for('attendance') }}">Attendance</a>
+<a href="{{ url_for('payroll') }}">Payroll</a>
+    <a href="{{ url_for('loans') }}">Loan Management</a>
+    <a href="{{ url_for('loan_report') }}">Loan Report</a>
+<a href="{{ url_for('payroll_contributions') }}">Contribution Shares</a>
+<a href="{{ url_for('thirteenth_month_report') }}">13th Month</a>
+<a href="{{ url_for('payroll_settings') }}">Payroll Settings</a>
+<a href="{{ url_for('logout') }}">Logout</a>
+</div>
+<div class="main">
+<div class="page-header"><div><h1>Final Pay</h1>
+<p>{{ employee.first_name }} {{ employee.last_name }} · {{ employee.employee_id }}</p></div></div>
+<div class="card">
+<form method="POST">
+<div class="form-grid">
+<div><label>Separation Date *</label><input type="date" name="separation_date" value="{{ employee.separation_date.strftime('%Y-%m-%d') if employee.separation_date else '' }}" required></div>
+<div><label>Separation Type</label>
+<select name="separation_type">
+<option>Resignation</option><option>Termination</option><option>End of Contract</option><option>Retirement</option>
+</select></div>
+</div>
+<label>Reason</label><textarea name="separation_reason" rows="3">{{ employee.separation_reason or '' }}</textarea>
+<div class="info-box">
+Final Pay covers unpaid attendance after the latest payroll cutoff through the separation date,
+plus pro-rated 13th-month pay. Employee and employer statutory shares are kept separate.
+</div>
+<button class="btn primary" type="submit">Generate Final Pay</button>
+</form>
+</div>
+</div></body></html>

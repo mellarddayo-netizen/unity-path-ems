@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Attendance</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        .filter-panel { display:flex; gap:16px; flex-wrap:wrap; align-items:flex-end; }
+        .filter-box { padding:12px; border:1px solid #e5e7eb; border-radius:8px; background:#fff; }
+        .filter-box label { display:block; font-size:12px; font-weight:700; margin-bottom:6px; }
+        .filter-box input { min-height:34px; }
+        .status-absent { font-weight:700; }
+        .status-incomplete { font-weight:700; }
+        .status-invalid { font-weight:700; color:#b91c1c; background:#fee2e2; padding:3px 7px; border-radius:5px; }
+.btn.danger { background:#dc2626; color:#fff; border-color:#dc2626; }
+        .btn.danger:hover { background:#b91c1c; border-color:#b91c1c; }
+        .date-cell { white-space:nowrap; font-weight:600; }
+        .employee-cell { min-width:150px; }
+        .table-container { overflow-x:auto; }
+        .filter-row th { padding:6px 4px; background:#f8fafc; }
+        .col-filter { width:100%; min-width:75px; box-sizing:border-box; padding:7px 8px; border:1px solid #d1d5db; border-radius:6px; font-size:12px; }
+    </style>
+</head>
+<body>
+<div class="sidebar">
+    <div class="brand-logo"><img src="{{ url_for('static', filename='logo.png') }}" alt="UNITY PATH RECOVERY AND COLLECTION SERVICES OPC"></div>
+    <a href="{{ url_for('dashboard') }}">Dashboard</a>
+    <a href="{{ url_for('employees') }}">Employees</a>
+    <a href="{{ url_for('attendance') }}">Attendance</a>
+    <a href="{{ url_for('calendar_view') }}">Calendar</a>
+<a href="{{ url_for('admin_leave_requests') }}">Leave Requests</a>
+    <a href="{{ url_for('payroll') }}">Payroll</a>
+    <a href="{{ url_for('loans') }}">Loan Management</a>
+    <a href="{{ url_for('loan_report') }}">Loan Report</a>
+    <a href="{{ url_for('payroll_settings') }}">Payroll Settings</a>
+    <a href="{{ url_for('payroll_contributions') }}">Contribution Shares</a>
+    <a href="{{ url_for('thirteenth_month_report') }}">13th Month</a>
+    <a href="{{ url_for('logout') }}">Logout</a>
+</div>
+
+<div class="main">
+    <div class="page-header">
+        <div>
+            <h1>Attendance</h1>
+            <p>Admin can time in, time out, and modify employee attendance.</p>
+        </div>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% for category, message in messages %}
+            <div class="alert {{ category }}">{{ message }}</div>
+        {% endfor %}
+    {% endwith %}
+
+    <div class="card">
+        <div class="filter-panel">
+            <form method="GET" class="filter-box">
+                <label for="month">Filter Whole Month</label>
+                <input id="month" type="month" name="month" value="{{ month_value }}" required>
+                <button class="btn primary" type="submit">View Month</button>
+            </form>
+
+            <form method="GET" class="filter-box">
+                <label>Custom Date Range</label>
+                <input type="date" name="start_date" value="{{ start_date.isoformat() }}" required>
+                <span> to </span>
+                <input type="date" name="end_date" value="{{ end_date.isoformat() }}" required>
+                <button class="btn primary" type="submit">View Range</button>
+            </form>
+            <div class="filter-box">
+                <label>Export</label>
+                <a class="btn" href="{{ url_for('export_attendance_excel', month=month_value, start_date=start_date.isoformat(), end_date=end_date.isoformat()) }}">Download Excel</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>{{ range_label }}</h2>
+        <div class="table-container">
+            <table>
+                <thead>
+                <tr>
+                    <th>Date</th><th>Employee</th><th>Time In</th><th>Time Out</th><th>Hours</th><th>Late</th><th>Undertime</th><th>OT Available</th><th>Approved OT</th><th>Status</th><th>Action</th>
+                </tr>
+                <tr class="filter-row">
+                    <th><input class="col-filter" data-col="0" placeholder="Filter date"></th>
+                    <th><input class="col-filter" data-col="1" placeholder="Filter employee"></th>
+                    <th><input class="col-filter" data-col="2" placeholder="Filter time in"></th>
+                    <th><input class="col-filter" data-col="3" placeholder="Filter time out"></th>
+                    <th><input class="col-filter" data-col="4" placeholder="Hours"></th>
+                    <th><input class="col-filter" data-col="5" placeholder="Late"></th>
+                    <th><input class="col-filter" data-col="6" placeholder="Undertime"></th>
+                    <th><input class="col-filter" data-col="7" placeholder="OT"></th>
+                    <th><input class="col-filter" data-col="8" placeholder="Approved OT"></th>
+                    <th><input class="col-filter" data-col="9" placeholder="Status"></th>
+                    <th><input class="col-filter" data-col="10" placeholder="Action"></th>
+                </tr>
+                </thead>
+                <tbody>
+                {% for row in attendance_rows %}
+                    {% set employee = row.employee %}
+                    {% set record = row.record %}
+                    {% set attendance_date = row.attendance_date %}
+                    <tr>
+                        <td class="date-cell">{{ attendance_date.strftime('%b %d, %Y') }}</td>
+                        <td class="employee-cell"><b>{{ employee.first_name }} {{ employee.last_name }}</b><br><small>{{ employee.employee_id }}</small></td>
+                        <td>{{ record.time_in.strftime('%I:%M %p') if record and record.time_in else "—" }}</td>
+                        <td>{{ record.time_out.strftime('%I:%M %p') if record and record.time_out else "—" }}</td>
+                        <td>{{ "%.2f"|format(record.total_hours or 0) if record and record.time_out else "0.00" }}</td>
+                        <td>{{ "%.2f"|format(record.late_hours or 0) if record and record.time_out else "0.00" }}</td>
+                        <td>{{ "%.2f"|format(record.undertime_hours or 0) if record and record.time_out else "0.00" }}</td>
+                        <td>{{ "%.2f"|format(record.overtime_hours or 0) if record and record.time_out else "0.00" }}</td>
+                        <td>{{ "%.2f"|format(record.approved_overtime_hours or 0) if record and record.time_out else "0.00" }}</td>
+                        <td>
+                            {% if not record %}
+                                <span class="status-absent">Absent</span>
+                            {% elif record.status == "Invalid Out" %}
+                                <span class="status-invalid">INVALID OUT</span>
+                            {% elif record.status == "VL" %}
+                                <span class="status-present">Vacation Leave (VL)</span>
+                            {% elif record.status == "SL" %}
+                                <span class="status-present">Sick Leave (SL)</span>
+                            {% elif not record.time_in %}
+                                <span class="status-absent">Absent</span>
+                            {% elif not record.time_out %}
+                                <span class="status-incomplete">Incomplete</span>
+                            {% else %}
+                                Present
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if not record %}
+                                <form method="POST" action="{{ url_for('admin_time_in', employee_id=employee.id) }}" class="inline">
+                                    <input type="hidden" name="attendance_date" value="{{ attendance_date.isoformat() }}">
+                                    <button class="btn small primary" type="submit">Time In</button>
+                                </form>
+                            {% elif not record.time_out %}
+                                <form method="POST" action="{{ url_for('admin_time_out', employee_id=employee.id) }}" class="inline">
+                                    <input type="hidden" name="attendance_date" value="{{ attendance_date.isoformat() }}">
+                                    <button class="btn small" type="submit">Time Out</button>
+                                </form>
+                                <a class="btn small" href="{{ url_for('edit_attendance', id=record.id) }}">Edit</a>
+                                <form method="POST" action="{{ url_for('delete_attendance', id=record.id) }}" class="inline" style="margin-left:4px;" onsubmit="return confirm('Delete this attendance record? This cannot be undone.');">
+                                    <button class="btn small danger" type="submit">Delete</button>
+                                </form>
+                            {% else %}
+                                <a class="btn small" href="{{ url_for('edit_attendance', id=record.id) }}">Edit Time</a>
+                                {% if record.overtime_hours and record.overtime_hours > 0 %}
+                                    <form method="POST" action="{{ url_for('approve_attendance_ot', id=record.id) }}" class="inline" style="margin-left:4px;">
+                                        <input type="number" name="approved_overtime_hours"
+                                               min="0" max="{{ '%.2f'|format(record.overtime_hours or 0) }}"
+                                               step="0.01" value="{{ '%.2f'|format(record.approved_overtime_hours or 0) }}"
+                                               style="width:70px;" title="Approved OT hours">
+                                        <button class="btn small primary" type="submit">
+                                            {{ "Update OT" if record.approved_overtime_hours else "Apply OT" }}
+                                        </button>
+                                    </form>
+                                {% endif %}
+                                <form method="POST" action="{{ url_for('delete_attendance', id=record.id) }}" class="inline" style="margin-left:4px;" onsubmit="return confirm('Delete this attendance record? This cannot be undone.');">
+                                    <button class="btn small danger" type="submit">Delete</button>
+                                </form>
+                            {% endif %}
+                        </td>
+                    </tr>
+                {% else %}
+                    <tr><td colspan="11">No active employees.</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+<script>
+function applyAttendanceColumnFilters() {
+    const filters = Array.from(document.querySelectorAll('.col-filter')).map(input => ({
+        col: Number(input.dataset.col), value: input.value.trim().toLowerCase()
+    })).filter(f => f.value);
+    document.querySelectorAll('table tbody tr').forEach(row => {
+        const cells = row.children;
+        if (!cells.length || row.querySelector('td[colspan]')) return;
+        const visible = filters.every(f => (cells[f.col]?.innerText || '').toLowerCase().includes(f.value));
+        row.style.display = visible ? '' : 'none';
+    });
+}
+document.querySelectorAll('.col-filter').forEach(input => input.addEventListener('input', applyAttendanceColumnFilters));
+</script>
+</body>
+</html>

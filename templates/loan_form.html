@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>{{ "Edit" if loan else "Add" }} Loan</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+<div class="sidebar">
+    <div class="brand-logo"><img src="{{ url_for('static', filename='logo.png') }}" alt="UNITY PATH RECOVERY AND COLLECTION SERVICES OPC"></div>
+    <a href="{{ url_for('dashboard') }}">Dashboard</a>
+    <a href="{{ url_for('employees') }}">Employees</a>
+    <a href="{{ url_for('attendance') }}">Attendance</a>
+    <a href="{{ url_for('calendar_view') }}">Calendar</a>
+    <a href="{{ url_for('payroll') }}">Payroll</a>
+    <a href="{{ url_for('loans') }}">Loan Management</a>
+    <a href="{{ url_for('loan_report') }}">Loan Report</a>
+    <a href="{{ url_for('payroll_settings') }}">Payroll Settings</a>
+    <a href="{{ url_for('payroll_contributions') }}">Contribution Shares</a>
+    <a href="{{ url_for('thirteenth_month_report') }}">13th Month</a>
+    <a href="{{ url_for('logout') }}">Logout</a>
+</div>
+<div class="main">
+    <div class="page-header">
+        <div><h1>{{ "Edit" if loan else "Add" }} Employee Loan</h1><p>Loan details used for payroll deductions.</p></div>
+    </div>
+
+    <div class="card">
+    <form method="POST">
+        <div class="form-grid">
+            <div>
+                <label>Employee *</label>
+                <select name="employee_id" required>
+                    <option value="">Select employee</option>
+                    {% for e in employees %}
+                    <option value="{{ e.id }}" {% if loan and loan.employee_id == e.id %}selected{% endif %}>
+                        {{ e.employee_id }} — {{ e.first_name }} {{ e.last_name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label>Loan Type *</label>
+                <select name="loan_type" required>
+                    {% for t in ["SSS Salary Loan","SSS Calamity Loan","Pag-IBIG MPL","Pag-IBIG Calamity Loan"] %}
+                    <option value="{{ t }}" {% if loan and loan.loan_type == t %}selected{% endif %}>{{ t }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label>Reference No.</label>
+                <input name="reference_no" value="{{ loan.reference_no if loan else '' }}">
+            </div>
+            <div>
+                <label>Original Loan Amount *</label>
+                <input type="number" step="0.01" min="0" name="original_amount" required value="{{ loan.original_amount if loan else 0 }}">
+            </div>
+            <div>
+                <label>Remaining Balance *</label>
+                <input type="number" step="0.01" min="0" name="balance" required value="{{ loan.balance if loan else 0 }}">
+            </div>
+            <div>
+                <label>Deduction per Payroll *</label>
+                <input type="number" step="0.01" min="0" name="deduction_per_payroll" required value="{{ loan.deduction_per_payroll if loan else 0 }}">
+            </div>
+            <div>
+                <label>Start Date</label>
+                <input type="date" name="start_date" value="{{ loan.start_date.isoformat() if loan and loan.start_date else '' }}">
+            </div>
+            <div>
+                <label>End Date</label>
+                <input type="date" name="end_date" value="{{ loan.end_date.isoformat() if loan and loan.end_date else '' }}">
+            </div>
+            <div>
+                <label>Loan Provider</label>
+                <input value="{{ 'SSS' if loan and loan.loan_type.startswith('SSS') else 'Pag-IBIG' if loan else '' }}" readonly>
+                <small>Government loan only. Company remittance is automatic in the Loan Report.</small>
+            </div>
+        </div>
+
+        <label>Notes</label>
+        <textarea name="notes" rows="4">{{ loan.notes if loan else '' }}</textarea>
+
+        <div class="info-box">
+            <b>Payroll behavior:</b> the active loan installment is automatically deducted from the employee's payroll.
+            When payroll is marked Paid, the payment is recorded and the loan balance is reduced.
+        </div>
+
+        <div class="actions">
+            <a class="btn" href="{{ url_for('loans') }}">Cancel</a>
+            <button class="btn primary" type="submit">Save Loan</button>
+        </div>
+    </form>
+    </div>
+</div>
+</body>
+</html>

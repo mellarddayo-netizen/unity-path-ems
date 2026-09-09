@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Create Employee Account</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+<div class="sidebar">
+    <div class="brand-logo"><img src="{{ url_for('static', filename='logo.png') }}" alt="UNITY PATH RECOVERY AND COLLECTION SERVICES OPC"></div>
+    <a href="{{ url_for('dashboard') }}">Dashboard</a>
+    <a href="{{ url_for('employees') }}">Employees</a>
+    <a href="{{ url_for('attendance') }}">Attendance</a>
+    <a href="{{ url_for('calendar_view') }}">Calendar</a>
+    <a href="{{ url_for('payroll') }}">Payroll</a>
+    <a href="{{ url_for('loans') }}">Loan Management</a>
+    <a href="{{ url_for('loan_report') }}">Loan Report</a>
+    <a href="{{ url_for('logout') }}">Logout</a>
+</div>
+<div class="main">
+    <div class="card narrow">
+        <h1>Create Employee Account</h1>
+        <p>Employee: <b>{{ employee.first_name }} {{ employee.last_name }}</b></p>
+        <form method="POST">
+            <label>Username</label>
+            <input name="username" value="{{ employee.employee_id }}" required>
+            <label>Password</label>
+            <input type="password" name="password" value="123456" required>
+            <div class="actions">
+                <a class="btn" href="{{ url_for('employee_profile', id=employee.id) }}">Cancel</a>
+                <button class="btn primary" type="submit">Create Account</button>
+            </div>
+        </form>
+    </div>
+</div>
+</body>
+</html>

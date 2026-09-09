@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>13th Month Report</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+<style>
+.filter-bar{display:flex;gap:10px;align-items:end;margin-bottom:18px;flex-wrap:wrap}
+.filter-bar label{font-weight:600;font-size:13px;display:block;margin-bottom:5px}
+.filter-bar select{min-width:120px;padding:8px;border:1px solid #ccd3df;border-radius:5px}
+.info-box{background:#eef6ff;border:1px solid #b9d7ff;padding:10px 12px;border-radius:5px;margin-bottom:16px;font-size:13px}
+</style>
+</head>
+<body>
+<div class="sidebar">
+<div class="brand-logo"><img src="{{ url_for('static', filename='logo.png') }}" alt="UNITY PATH RECOVERY AND COLLECTION SERVICES OPC"></div>
+<a href="{{ url_for('dashboard') }}">Dashboard</a>
+<a href="{{ url_for('employees') }}">Employees</a>
+<a href="{{ url_for('attendance') }}">Attendance</a>
+<a href="{{ url_for('calendar_view') }}">Calendar</a>
+<a href="{{ url_for('admin_leave_requests') }}">Leave Requests</a>
+<a href="{{ url_for('payroll') }}">Payroll</a>
+<a href="{{ url_for('loans') }}">Loan Management</a>
+<a href="{{ url_for('loan_report') }}">Loan Report</a>
+<a href="{{ url_for('payroll_settings') }}">Payroll Settings</a>
+<a href="{{ url_for('payroll_contributions') }}">Contribution Shares</a>
+<a href="{{ url_for('thirteenth_month_report') }}">13th Month</a>
+<a href="{{ url_for('logout') }}">Logout</a>
+</div>
+<div class="main">
+<div class="page-header">
+<div>
+<h1>13th Month Report</h1>
+<p>Basic pay earned ÷ 12</p>
+</div>
+</div>
+<div class="card">
+<form method="get" class="filter-bar">
+<div><label for="year">Year</label><select name="year" id="year">
+{% for y in range(year-2, year+3) %}<option value="{{ y }}" {% if y == year %}selected{% endif %}>{{ y }}</option>{% endfor %}
+</select></div>
+<button type="submit" class="btn btn-primary">View Report</button>
+</form>
+<div class="info-box">The report uses basic pay earned from payroll records for the selected calendar year. Draft, Approved, and Paid payrolls are included; allowances, incentives, overtime, and statutory deductions are excluded.</div>
+<div class="table-container"><table><thead><tr><th>Employee</th><th>Basic Pay Earned</th><th>13th Month</th></tr></thead>
+<tbody>{% for r in rows %}<tr><td>{{ r.employee.first_name }} {{ r.employee.last_name }}</td>
+<td>₱{{ "{:,.2f}".format(r.basic) }}</td><td><b>₱{{ "{:,.2f}".format(r.thirteenth) }}</b></td></tr>
+{% else %}<tr><td colspan="3">No employees.</td></tr>{% endfor %}</tbody>
+<tfoot><tr><th>TOTAL</th><th>₱{{ "{:,.2f}".format(total_basic) }}</th><th>₱{{ "{:,.2f}".format(total_thirteenth) }}</th></tr></tfoot>
+</table></div>
+</div>
+</div>
+</body></html>

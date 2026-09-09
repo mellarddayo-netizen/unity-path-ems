@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>My Payroll</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+<div class="sidebar">
+    <div class="brand-logo"><img src="{{ url_for('static', filename='logo.png') }}" alt="UNITY PATH RECOVERY AND COLLECTION SERVICES OPC"></div>
+    <a href="{{ url_for('employee_dashboard') }}">Dashboard</a>
+    <a href="{{ url_for('employee_self_profile') }}">My Profile</a>
+    <a href="{{ url_for('employee_attendance') }}">My Attendance</a>
+<a href="{{ url_for('employee_leave_requests') }}">Leave Requests</a>
+    <a href="{{ url_for('employee_payroll') }}">My Payroll</a>
+    <a href="{{ url_for('logout') }}">Logout</a>
+</div>
+<div class="main">
+    <h1>My Payroll</h1>
+    <div class="info-box">Each month has two payroll cutoffs: <b>1–15</b> and <b>16–last day</b>.</div>
+    <div class="card table-container">
+        <table>
+            <thead><tr><th>Period</th><th>Pay Date</th><th>Gross</th><th>Deductions</th><th>Net</th><th>Status</th><th></th></tr></thead>
+            <tbody>
+            {% for p in payroll_records %}
+                <tr>
+                    <td>{{ p.period_start.strftime('%b %d, %Y') }} – {{ p.period_end.strftime('%b %d, %Y') }}</td>
+                    <td>{{ p.pay_date.strftime('%b %d, %Y') if p.pay_date else "—" }}</td>
+                    <td>₱{{ "{:,.2f}".format(p.gross_pay or 0) }}</td>
+                    <td>₱{{ "{:,.2f}".format(p.total_deductions or 0) }}</td>
+                    <td><b>₱{{ "{:,.2f}".format(p.net_pay or 0) }}</b></td>
+                    <td><span class="badge">{{ p.status }}</span></td>
+                    <td><a class="btn small" href="{{ url_for('employee_payslip', id=p.id) }}">Payslip</a></td>
+                </tr>
+            {% else %}
+                <tr><td colspan="7">No payroll records yet.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+</body>
+</html>

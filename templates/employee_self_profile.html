@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>My Profile</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+<div class="sidebar">
+    <div class="brand-logo"><img src="{{ url_for('static', filename='logo.png') }}" alt="UNITY PATH RECOVERY AND COLLECTION SERVICES OPC"></div>
+    <a href="{{ url_for('employee_dashboard') }}">Dashboard</a>
+    <a href="{{ url_for('employee_self_profile') }}">My Profile</a>
+    <a href="{{ url_for('employee_attendance') }}">My Attendance</a>
+<a href="{{ url_for('employee_leave_requests') }}">Leave Requests</a>
+    <a href="{{ url_for('employee_payroll') }}">My Payroll</a>
+    <a href="{{ url_for('logout') }}">Logout</a>
+</div>
+<div class="main">
+    <h1>My Profile</h1>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% for category, message in messages %}
+            <div class="alert {{ category }}">{{ message }}</div>
+        {% endfor %}
+    {% endwith %}
+
+    <div class="card profile-header">
+        {% if employee.profile_photo %}
+            <img class="photo-2x2" src="{{ url_for('static', filename='uploads/profiles/' + employee.profile_photo) }}">
+        {% else %}
+            <div class="photo-2x2 placeholder">2x2</div>
+        {% endif %}
+        <div>
+            <h2>{{ employee.first_name }} {{ employee.middle_name or '' }} {{ employee.last_name }}</h2>
+            <p>{{ employee.employee_id }} · {{ employee.position or "—" }}</p>
+        </div>
+    </div>
+
+    <div class="card">
+        <form method="POST" enctype="multipart/form-data">
+            <h2>Editable Information</h2>
+            <div class="form-grid">
+                <div><label>First Name</label><input value="{{ employee.first_name }}" disabled></div>
+                <div><label>Last Name</label><input value="{{ employee.last_name }}" disabled></div>
+                <div><label>Employee ID</label><input value="{{ employee.employee_id }}" disabled></div>
+                <div><label>Department</label><input value="{{ employee.department or '' }}" disabled></div>
+                <div><label>Position</label><input value="{{ employee.position or '' }}" disabled></div>
+                <div><label>Profile Picture (2x2)</label><input type="file" name="profile_photo" accept=".jpg,.jpeg,.png,.webp"></div>
+                <div><label>Email</label><input type="email" name="email" value="{{ employee.email or '' }}"></div>
+                <div><label>Phone</label><input name="phone" value="{{ employee.phone or '' }}"></div>
+            </div>
+
+            <label>Address</label>
+            <textarea name="address" rows="3">{{ employee.address or '' }}</textarea>
+
+            <h2>Emergency Contact</h2>
+            <div class="form-grid">
+                <div><label>Name</label><input name="emergency_name" value="{{ employee.emergency_name or '' }}"></div>
+                <div><label>Relationship</label><input name="emergency_relationship" value="{{ employee.emergency_relationship or '' }}"></div>
+                <div><label>Phone</label><input name="emergency_phone" value="{{ employee.emergency_phone or '' }}"></div>
+            </div>
+            <label>Emergency Address</label>
+            <textarea name="emergency_address" rows="3">{{ employee.emergency_address or '' }}</textarea>
+
+            <div class="info-box">Government IDs, basic daily rate, department, position and other payroll-critical information are read-only from the employee side.</div>
+
+            <button class="btn primary" type="submit">Save Profile</button>
+        </form>
+    </div>
+</div>
+</body>
+</html>

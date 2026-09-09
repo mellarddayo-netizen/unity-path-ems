@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>My Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+<div class="sidebar">
+    <div class="brand-logo"><img src="{{ url_for('static', filename='logo.png') }}" alt="UNITY PATH RECOVERY AND COLLECTION SERVICES OPC"></div>
+    <a href="{{ url_for('employee_dashboard') }}">Dashboard</a>
+    <a href="{{ url_for('employee_self_profile') }}">My Profile</a>
+    <a href="{{ url_for('employee_attendance') }}">My Attendance</a>
+<a href="{{ url_for('employee_leave_requests') }}">Leave Requests</a>
+    <a href="{{ url_for('employee_payroll') }}">My Payroll</a>
+    <a href="{{ url_for('logout') }}">Logout</a>
+</div>
+<div class="main">
+    <div class="page-header">
+        <div>
+            <h1>Welcome, {{ employee.first_name }}!</h1>
+            <p>{{ employee.employee_id }}</p>
+        </div>
+        {% if employee.profile_photo %}
+            <img class="avatar" src="{{ url_for('static', filename='uploads/profiles/' + employee.profile_photo) }}">
+        {% endif %}
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% for category, message in messages %}
+            <div class="alert {{ category }}">{{ message }}</div>
+        {% endfor %}
+    {% endwith %}
+
+    <div class="card">
+        <h2>Today's Attendance</h2>
+        <div class="stats-row">
+            <div><span>Time In</span><b>{{ today_attendance.time_in.strftime('%I:%M %p') if today_attendance and today_attendance.time_in else "—" }}</b></div>
+            <div><span>Time Out</span><b>{{ today_attendance.time_out.strftime('%I:%M %p') if today_attendance and today_attendance.time_out else "—" }}</b></div>
+            <div><span>Total Hours</span><b>{{ "%.2f"|format(today_attendance.total_hours or 0) if today_attendance else "0.00" }}</b></div>
+        </div>
+
+        <div class="actions">
+            {% if not today_attendance or not today_attendance.time_in %}
+                <form method="POST" action="{{ url_for('employee_time_in') }}">
+                    <button class="btn primary" type="submit">TIME IN</button>
+                </form>
+            {% elif not today_attendance.time_out %}
+                <form method="POST" action="{{ url_for('employee_time_out') }}">
+                    <button class="btn danger" type="submit">TIME OUT</button>
+                </form>
+            {% else %}
+                <span class="badge success">Attendance Complete</span>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if latest_payroll %}
+    <div class="card">
+        <h2>Latest Payroll</h2>
+        <p>{{ latest_payroll.period_start.strftime('%b %d, %Y') }} – {{ latest_payroll.period_end.strftime('%b %d, %Y') }}</p>
+        <h2>₱{{ "{:,.2f}".format(latest_payroll.net_pay or 0) }}</h2>
+        <a class="btn" href="{{ url_for('employee_payslip', id=latest_payroll.id) }}">View Payslip</a>
+    </div>
+    {% endif %}
+</div>
+</body>
+</html>

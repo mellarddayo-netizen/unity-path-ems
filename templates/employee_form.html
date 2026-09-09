@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>{{ "Edit" if employee else "Add" }} Employee</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+      .profile-tabs{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 20px;padding-bottom:12px;border-bottom:1px solid #dbe3ee}
+      .profile-tab{border:1px solid #d1dae6;background:#f5f7fb;color:#17365d;border-radius:8px;padding:9px 13px;font-weight:700;cursor:pointer}
+      .profile-tab.active{background:#17365d;color:#fff;border-color:#17365d}
+      .profile-pane{display:none}.profile-pane.active{display:block}
+      .section-intro{color:#6b7280;margin:-8px 0 18px;font-size:13px}
+      .subcard{border:1px solid #dbe3ee;border-radius:10px;padding:16px;margin:14px 0;background:#fbfcfe}
+      .subcard h3{margin:0 0 12px;color:#17365d;font-size:15px}
+      .repeat-row{display:grid;grid-template-columns:repeat(5,minmax(0,1fr)) auto;gap:9px;align-items:end;margin-bottom:10px}
+      .repeat-row.education{grid-template-columns:1.1fr 1.5fr 1.2fr .8fr 1.1fr auto}
+      .repeat-row.work{grid-template-columns:1.5fr 1.2fr .9fr .9fr 1.3fr auto}
+      .repeat-row.family{grid-template-columns:.8fr 1.4fr .9fr 1.1fr 1.1fr auto}
+      .repeat-row.ref{grid-template-columns:1.4fr 1.5fr 1fr 1.1fr auto}
+      .repeat-row.doc{grid-template-columns:1.5fr .8fr .9fr 1.4fr auto}
+      .repeat-row input,.repeat-row select{min-width:0}
+      .remove-row{background:#fff;border:1px solid #dc3545;color:#dc3545;padding:9px 11px;border-radius:7px;cursor:pointer}
+      .add-row{margin-top:3px}
+      .photo-preview{width:110px;height:110px;object-fit:cover;border-radius:10px;border:1px solid #d1dae6;background:#eef3f8}
+      .skill-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+      .check-inline{display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+      .check-inline label{display:inline-flex;gap:6px;align-items:center;font-weight:400;margin:0}
+
+      .fixed-education{border:1px solid #dbe3ee;border-radius:10px;overflow:hidden}
+      .education-item{display:grid;grid-template-columns:1.15fr 1.5fr 1.25fr .75fr 1.25fr;gap:10px;align-items:center;padding:10px;border-bottom:1px solid #e5eaf1;background:#fff}
+      .education-item:last-child{border-bottom:0}.education-item:nth-child(even){background:#f8fafc}.education-item .edu-level{font-weight:700;color:#17365d}.education-item input{width:100%;box-sizing:border-box}
+      .document-checklist{display:grid;grid-template-columns:1fr 1fr;gap:0;border:1px solid #dbe3ee;border-radius:10px;overflow:hidden}
+      .document-item{display:flex;align-items:center;gap:10px;padding:13px 15px;border-bottom:1px solid #e5eaf1;background:#fff;cursor:pointer;font-weight:600}.document-item:nth-child(4n+1),.document-item:nth-child(4n+2){background:#f8fafc}.document-item input{width:18px;height:18px;accent-color:#17365d}.document-item span{color:#25354d}
+      @media(max-width:900px){.education-item{grid-template-columns:1fr 1fr}.document-checklist{grid-template-columns:1fr}}
+      @media(max-width:900px){.repeat-row,.repeat-row.education,.repeat-row.work,.repeat-row.family,.repeat-row.ref,.repeat-row.doc{grid-template-columns:1fr 1fr}.skill-grid{grid-template-columns:1fr}}
+    </style>
+</head>
+<body>
+<div class="sidebar">
+    <div class="brand-logo"><img src="{{ url_for('static', filename='logo.png') }}" alt="UNITY PATH RECOVERY AND COLLECTION SERVICES OPC"></div>
+    <a href="{{ url_for('dashboard') }}">Dashboard</a><a href="{{ url_for('employees') }}">Employees</a>
+    <a href="{{ url_for('attendance') }}">Attendance</a><a href="{{ url_for('calendar_view') }}">Calendar</a>
+    <a href="{{ url_for('admin_leave_requests') }}">Leave Requests</a><a href="{{ url_for('payroll') }}">Payroll</a>
+    <a href="{{ url_for('loans') }}">Loan Management</a><a href="{{ url_for('loan_report') }}">Loan Report</a>
+    <a href="{{ url_for('payroll_settings') }}">Payroll Settings</a><a href="{{ url_for('payroll_contributions') }}">Contribution Shares</a>
+    <a href="{{ url_for('thirteenth_month_report') }}">13th Month</a><a href="{{ url_for('logout') }}">Logout</a>
+</div>
+<div class="main">
+  <div class="page-header"><div><h1>{{ "Edit" if employee else "Add" }} Employee</h1><p>Complete employee personal and professional 201-file information</p></div></div>
+  {% with messages = get_flashed_messages(with_categories=true) %}{% for category,message in messages %}<div class="alert {{ category }}">{{ message }}</div>{% endfor %}{% endwith %}
+  <div class="card">
+    <form method="POST" enctype="multipart/form-data" id="employee-form">
+      <div class="profile-tabs">
+        <button type="button" class="profile-tab active" data-tab="employment">1. Employment</button>
+        <button type="button" class="profile-tab" data-tab="personal">2. Personal</button>
+        <button type="button" class="profile-tab" data-tab="contact">3. Contact</button>
+        <button type="button" class="profile-tab" data-tab="education">4. Education</button>
+        <button type="button" class="profile-tab" data-tab="work">5. Work History</button>
+        <button type="button" class="profile-tab" data-tab="skills">6. Skills</button>
+        <button type="button" class="profile-tab" data-tab="government">7. Government IDs</button>
+        <button type="button" class="profile-tab" data-tab="family">8. Family & References</button>
+        <button type="button" class="profile-tab" data-tab="documents">9. Documents</button>
+      </div>
+
+      <div class="profile-pane active" id="tab-employment">
+        <h2>Employment Information</h2><p class="section-intro">Core employment details, schedule and compensation.</p>
+        <div class="form-grid">
+          <div><label>Employee ID *</label><input name="employee_id" value="{{ employee.employee_id if employee else '' }}" required></div>
+          <div><label>Employment Status</label><select name="employment_status">{% for x in ['Active','Inactive','Resigned','Separated'] %}<option value="{{x}}" {{'selected' if employee and employee.employment_status==x else ''}}>{{x}}</option>{% endfor %}</select></div>
+          <div><label>Department</label><input name="department" value="{{ employee.department if employee else '' }}"></div>
+          <div><label>Position / Job Title</label><input name="position" value="{{ employee.position if employee else '' }}"></div>
+          <div><label>Reporting To</label><input name="reporting_to" value="{{ employee.reporting_to if employee else '' }}"></div>
+          <div><label>Date Hired</label><input type="date" name="date_hired" value="{{ employee.date_hired.strftime('%Y-%m-%d') if employee and employee.date_hired else '' }}"></div>
+          <div><label>Regularization Date</label><input type="date" name="regularization_date" value="{{ employee.regularization_date.strftime('%Y-%m-%d') if employee and employee.regularization_date else '' }}"></div>
+          <div><label>Employment Type</label><select name="employment_type">{% for x in ['Full-Time','Part-Time','Contractual','Project-Based'] %}<option {{'selected' if employee and employee.employment_type==x else ''}}>{{x}}</option>{% endfor %}</select></div>
+          <div><label>Work Location</label><input name="work_location" value="{{ employee.work_location if employee else '' }}"></div>
+          <div><label>Work Schedule Type</label><select name="schedule_type">{% for x in ['Fixed','Shifting','Flexible'] %}<option {{'selected' if employee and employee.schedule_type==x else ''}}>{{x}}</option>{% endfor %}</select></div>
+          <div><label>Schedule Details</label><input name="schedule_details" value="{{ employee.schedule_details or '' if employee else 'Monday–Friday, 8:00 AM–5:00 PM' }}"></div>
+          <div><label>Basic Daily Rate</label><input type="number" step="0.01" name="daily_rate" value="{{ employee.daily_rate if employee else 0 }}"></div>
+          <div><label>Daily Allowance</label><input type="number" step="0.01" min="0" name="daily_allowance" value="{{ employee.daily_allowance if employee else 0 }}"></div>
+          <div><label>Daily Incentive</label><input type="number" step="0.01" min="0" name="daily_incentive" value="{{ employee.daily_incentive if employee else 0 }}"></div>
+        </div>
+        <div class="subcard"><h3>Separation Information</h3><div class="form-grid"><div><label>Separation Date</label><input type="date" name="separation_date" value="{{ employee.separation_date.strftime('%Y-%m-%d') if employee and employee.separation_date else '' }}"></div><div><label>Separation Type</label><select name="separation_type"><option value="">—</option>{% for x in ['Resignation','Termination','End of Contract','Retirement'] %}<option {{'selected' if employee and employee.separation_type==x else ''}}>{{x}}</option>{% endfor %}</select></div><div style="grid-column:1/-1"><label>Separation Reason</label><textarea name="separation_reason" rows="2">{{ employee.separation_reason or '' if employee else '' }}</textarea></div></div></div>
+        <div class="subcard"><h3>Bank / Payroll Information</h3><div class="form-grid"><div><label>Bank Name</label><input name="bank_name" value="{{ employee.bank_name if employee else '' }}"></div><div><label>Account Name</label><input name="bank_account_name" value="{{ employee.bank_account_name if employee else '' }}"></div><div><label>Account Number</label><input name="bank_account_number" value="{{ employee.bank_account_number if employee else '' }}"></div></div></div>
+        <div class="subcard"><h3>Professional Summary</h3><textarea name="professional_summary" rows="4" placeholder="Short professional background / summary">{{ employee.professional_summary or '' if employee else '' }}</textarea></div>
+        <div class="subcard"><h3>Leave Entitlements</h3><div class="form-grid"><div><label>VL Entitlement</label><input type="number" step="0.5" min="0" name="vl_entitlement" value="{{ employee.vl_entitlement if employee else 0 }}"></div><div><label>SL Entitlement</label><input type="number" step="0.5" min="0" name="sl_entitlement" value="{{ employee.sl_entitlement if employee else 0 }}"></div></div></div>
+      </div>
+
+      <div class="profile-pane" id="tab-personal"><h2>Personal Information</h2><p class="section-intro">Personal details used in the employee 201 file.</p>
+        <div class="form-grid"><div><label>First Name *</label><input name="first_name" value="{{ employee.first_name if employee else '' }}" required></div><div><label>Last Name *</label><input name="last_name" value="{{ employee.last_name if employee else '' }}" required></div><div><label>Middle Name</label><input name="middle_name" value="{{ employee.middle_name if employee else '' }}"></div><div><label>Nickname / Preferred Name</label><input name="nickname" value="{{ employee.nickname if employee else '' }}"></div><div><label>Date of Birth</label><input name="date_of_birth" placeholder="e.g. November 07, 1997" value="{{ employee.date_of_birth if employee else '' }}"></div><div><label>Place of Birth</label><input name="place_of_birth" value="{{ employee.place_of_birth if employee else '' }}"></div><div><label>Sex</label><select name="sex"><option value="">—</option>{% for x in ['Male','Female'] %}<option {{'selected' if employee and employee.sex==x else ''}}>{{x}}</option>{% endfor %}</select></div><div><label>Civil Status</label><select name="civil_status"><option value="">—</option>{% for x in ['Single','Married','Widowed','Separated'] %}<option {{'selected' if employee and employee.civil_status==x else ''}}>{{x}}</option>{% endfor %}</select></div><div><label>Nationality</label><input name="nationality" value="{{ employee.nationality if employee else 'Filipino' }}"></div><div><label>Religion</label><input name="religion" value="{{ employee.religion if employee else '' }}"></div><div><label>Blood Type</label><input name="blood_type" value="{{ employee.blood_type if employee else '' }}"></div><div><label>Height</label><input name="height" placeholder="e.g. 168 cm" value="{{ employee.height if employee else '' }}"></div><div><label>Weight</label><input name="weight" placeholder="e.g. 65 kg" value="{{ employee.weight if employee else '' }}"></div></div>
+        <div class="subcard"><h3>2x2 Profile Picture</h3>{% if employee and employee.profile_photo %}<img class="photo-preview" src="{{ url_for('static', filename='uploads/profiles/' + employee.profile_photo) }}">{% endif %}<input type="file" name="profile_photo" accept=".jpg,.jpeg,.png,.webp"><small>Use a clear formal 2x2-style ID photo.</small></div>
+      </div>
+
+      <div class="profile-pane" id="tab-contact"><h2>Contact Information</h2><div class="form-grid"><div style="grid-column:1/-1"><label>Current Home Address</label><textarea name="address" rows="2">{{ employee.address or '' if employee else '' }}</textarea></div><div style="grid-column:1/-1"><label>Permanent Address</label><textarea name="permanent_address" rows="2">{{ employee.permanent_address or '' if employee else '' }}</textarea></div><div><label>Mobile Number (Primary)</label><input name="phone" value="{{ employee.phone if employee else '' }}"></div><div><label>Mobile Number (Secondary)</label><input name="secondary_phone" value="{{ employee.secondary_phone if employee else '' }}"></div><div><label>Personal Email</label><input type="email" name="email" value="{{ employee.email if employee else '' }}"></div><div><label>Company Email</label><input type="email" name="company_email" value="{{ employee.company_email if employee else '' }}"></div><div><label>Facebook / Social Media</label><input name="social_media" value="{{ employee.social_media if employee else '' }}"></div></div>
+        <div class="subcard"><h3>Emergency Contact</h3><div class="form-grid"><div><label>Name</label><input name="emergency_name" value="{{ employee.emergency_name if employee else '' }}"></div><div><label>Relationship</label><input name="emergency_relationship" value="{{ employee.emergency_relationship if employee else '' }}"></div><div><label>Contact Number</label><input name="emergency_phone" value="{{ employee.emergency_phone if employee else '' }}"></div><div style="grid-column:1/-1"><label>Address</label><textarea name="emergency_address" rows="2">{{ employee.emergency_address or '' if employee else '' }}</textarea></div></div></div>
+      </div>
+
+      <div class="profile-pane" id="tab-education"><h2>Educational Background</h2><p class="section-intro">Complete the standard education levels below. No need to add rows.</p><div id="education-rows" class="fixed-education"></div><input type="hidden" name="education_json" id="education_json"></div>
+      <div class="profile-pane" id="tab-work"><h2>Previous Employment</h2><p class="section-intro">Add previous employers and positions.</p><div id="work-rows"></div><button type="button" class="btn add-row" onclick="addWork()">+ Add Employment</button><input type="hidden" name="work_experience_json" id="work_json"></div>
+      <div class="profile-pane" id="tab-skills"><h2>Skills & Competencies</h2><div class="skill-grid"><div><label>Collection / Recovery Skills</label><select id="collection_skill"><option>—</option><option>Beginner</option><option>Intermediate</option><option>Advanced</option></select></div><div><label>Negotiation Skills</label><select id="negotiation_skill"><option>—</option><option>Beginner</option><option>Intermediate</option><option>Advanced</option></select></div><div><label>Computer Skills</label><select id="computer_skill"><option>—</option><option>Basic</option><option>Intermediate</option><option>Advanced</option></select></div><div><label>Communication — Oral</label><select id="oral_skill"><option>—</option><option>Good</option><option>Very Good</option><option>Excellent</option></select></div><div><label>Communication — Written</label><select id="written_skill"><option>—</option><option>Good</option><option>Very Good</option><option>Excellent</option></select></div><div><label>Languages Spoken</label><input id="languages_spoken"></div><div><label>Other Skills / Certifications</label><input id="other_skills"></div><div><label>TESDA / PRC Licenses</label><input id="licenses"></div></div><input type="hidden" name="skills_json" id="skills_json"><div class="subcard"><label>Primary Duties & Responsibilities</label><textarea name="duties" rows="8" placeholder="List the employee's main responsibilities...">{{ employee.duties or '' if employee else '' }}</textarea></div></div>
+      <div class="profile-pane" id="tab-government"><h2>Government IDs & Numbers</h2><div class="form-grid"><div><label>SSS Number</label><input name="sss_number" value="{{ employee.sss_number if employee else '' }}"></div><div><label>PhilHealth Number</label><input name="philhealth_number" value="{{ employee.philhealth_number if employee else '' }}"></div><div><label>Pag-IBIG / MID Number</label><input name="pagibig_number" value="{{ employee.pagibig_number if employee else '' }}"></div><div><label>TIN</label><input name="tin_number" value="{{ employee.tin_number if employee else '' }}"></div><div><label>UMID Number</label><input name="umid_number" value="{{ employee.umid_number if employee else '' }}"></div><div><label>PhilSys / National ID</label><input name="national_id" value="{{ employee.national_id if employee else '' }}"></div><div><label>Voter's ID</label><input name="voters_id" value="{{ employee.voters_id if employee else '' }}"></div><div><label>Driver's License</label><input name="drivers_license" value="{{ employee.drivers_license if employee else '' }}"></div><div><label>Passport Number</label><input name="passport_number" value="{{ employee.passport_number if employee else '' }}"></div><div><label>Passport Expiry</label><input name="passport_expiry" value="{{ employee.passport_expiry if employee else '' }}"></div></div><p class="section-intro">The additional ID fields above are stored with the employee profile and included in the export.</p></div>
+      <div class="profile-pane" id="tab-family"><h2>Family Background</h2><div id="family-rows"></div><button type="button" class="btn add-row" onclick="addFamily()">+ Add Family Member</button><input type="hidden" name="family_json" id="family_json"><h2 style="margin-top:28px">Character References</h2><div id="ref-rows"></div><button type="button" class="btn add-row" onclick="addReference()">+ Add Reference</button><input type="hidden" name="references_json" id="references_json"></div>
+      <div class="profile-pane" id="tab-documents"><h2>Pre-Employment Documents</h2><p class="section-intro">Checklist only. Tick the documents submitted by the employee.</p><div id="doc-rows" class="document-checklist"></div><input type="hidden" name="documents_json" id="documents_json"></div>
+
+      <div class="actions" style="margin-top:24px"><a class="btn" href="{{ url_for('employees') }}">Cancel</a><button class="btn primary" type="submit">Save Employee Profile</button></div>
+    </form>
+  </div>
+</div>
+<script>
+const initial = {{ profile_data|tojson }};
+function esc(v){return String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function rowWrap(html, cls){return `<div class="repeat-row ${cls}">${html}<button type="button" class="remove-row" onclick="this.parentElement.remove()">Remove</button></div>`}
+function addEducation(v={}){const row=document.createElement('div');row.className='education-item';row.innerHTML=`<div class="edu-level">${esc(v.level||'')}</div><div><input data-k="school" value="${esc(v.school)}" placeholder="School / Institution"></div><div><input data-k="course" value="${esc(v.course)}" placeholder="Degree / Course"></div><div><input data-k="year" value="${esc(v.year)}" placeholder="Year"></div><div><input data-k="honors" value="${esc(v.honors)}" placeholder="Honors / Awards"></div>`;document.getElementById('education-rows').appendChild(row);}
+function buildFixedEducation(){const levels=['Elementary','Junior High School','Senior High School','Vocational / TESDA','College / University','Post-Graduate'];const existing={};(initial.education||[]).forEach(x=>{if(x.level)existing[x.level]=x;});document.getElementById('education-rows').innerHTML='';levels.forEach(level=>addEducation(existing[level]||{level}));}
+function addWork(v={}){document.getElementById('work-rows').insertAdjacentHTML('beforeend',rowWrap(`<div><label>Company / Employer</label><input data-k="company" value="${esc(v.company)}"></div><div><label>Position / Title</label><input data-k="position" value="${esc(v.position)}"></div><div><label>Date From</label><input data-k="from" value="${esc(v.from)}"></div><div><label>Date To</label><input data-k="to" value="${esc(v.to)}"></div><div><label>Reason for Leaving</label><input data-k="reason" value="${esc(v.reason)}"></div>`,`work`));}
+function addFamily(v={}){document.getElementById('family-rows').insertAdjacentHTML('beforeend',rowWrap(`<div><label>Relationship</label><input data-k="relationship" value="${esc(v.relationship)}"></div><div><label>Full Name</label><input data-k="name" value="${esc(v.name)}"></div><div><label>Date of Birth</label><input data-k="dob" value="${esc(v.dob)}"></div><div><label>Occupation</label><input data-k="occupation" value="${esc(v.occupation)}"></div><div><label>Contact Number</label><input data-k="contact" value="${esc(v.contact)}"></div>`,`family`));}
+function addReference(v={}){document.getElementById('ref-rows').insertAdjacentHTML('beforeend',rowWrap(`<div><label>Full Name</label><input data-k="name" value="${esc(v.name)}"></div><div><label>Company / Organization</label><input data-k="company" value="${esc(v.company)}"></div><div><label>Position</label><input data-k="position" value="${esc(v.position)}"></div><div><label>Contact Number</label><input data-k="contact" value="${esc(v.contact)}"></div>`,`ref`));}
+function addDocument(v={}){const row=document.createElement('label');row.className='document-item';const checked=(v.submitted||'No')==='Yes';row.innerHTML=`<input type="checkbox" data-k="submitted" ${checked?'checked':''}><span>${esc(v.document||'')}</span>`;document.getElementById('doc-rows').appendChild(row);}
+function buildDocumentChecklist(){const names=['Resume / Curriculum Vitae','Birth Certificate (PSA)','NBI Clearance','Police Clearance','Barangay Clearance','SSS ID / E-1 Form','PhilHealth MDR Form','Pag-IBIG MDF Form','TIN / BIR Form 1902','Valid Government ID','2x2 ID Photos','Certificate of Employment (previous)','Diploma / Transcript of Records','Medical Certificate','Drug Test Result'];const existing={};(initial.documents||[]).forEach(x=>{if(x.document)existing[x.document]=x;});document.getElementById('doc-rows').innerHTML='';names.forEach(name=>addDocument(existing[name]||{document:name}));}
+function collect(container, keys){return [...document.querySelectorAll(container+' .repeat-row')].map(r=>Object.fromEntries(keys.map(k=>[k,r.querySelector(`[data-k="${k}"]`)?.value||'']))).filter(x=>Object.values(x).some(Boolean));}
+function collectEducation(){return [...document.querySelectorAll('#education-rows .education-item')].map(r=>({level:r.querySelector('.edu-level')?.textContent.trim()||'',school:r.querySelector('[data-k="school"]')?.value||'',course:r.querySelector('[data-k="course"]')?.value||'',year:r.querySelector('[data-k="year"]')?.value||'',honors:r.querySelector('[data-k="honors"]')?.value||''}));}
+function collectDocuments(){return [...document.querySelectorAll('#doc-rows .document-item')].map(r=>({document:r.querySelector('span')?.textContent.trim()||'',submitted:r.querySelector('[data-k="submitted"]')?.checked?'Yes':'No',date:'',remarks:''}));}
+function syncJson(){document.getElementById('education_json').value=JSON.stringify(collectEducation());document.getElementById('work_json').value=JSON.stringify(collect('#work-rows',['company','position','from','to','reason']));document.getElementById('family_json').value=JSON.stringify(collect('#family-rows',['relationship','name','dob','occupation','contact']));document.getElementById('references_json').value=JSON.stringify(collect('#ref-rows',['name','company','position','contact']));document.getElementById('documents_json').value=JSON.stringify(collectDocuments());const skills={collection:document.getElementById('collection_skill').value,negotiation:document.getElementById('negotiation_skill').value,computer:document.getElementById('computer_skill').value,oral:document.getElementById('oral_skill').value,written:document.getElementById('written_skill').value,languages:document.getElementById('languages_spoken').value,other:document.getElementById('other_skills').value,licenses:document.getElementById('licenses').value};document.getElementById('skills_json').value=JSON.stringify(skills);}
+buildFixedEducation(); for(const v of (initial.work||[]))addWork(v); for(const v of (initial.family||[]))addFamily(v); for(const v of (initial.references||[]))addReference(v); buildDocumentChecklist();
+const sk=initial.skills||{}; for(const [id,key] of [['collection_skill','collection'],['negotiation_skill','negotiation'],['computer_skill','computer'],['oral_skill','oral'],['written_skill','written'],['languages_spoken','languages'],['other_skills','other'],['licenses','licenses']]) if(sk[key]!=null)document.getElementById(id).value=sk[key];
+document.getElementById('employee-form').addEventListener('submit',syncJson);
+document.querySelectorAll('.profile-tab').forEach(btn=>btn.addEventListener('click',()=>{document.querySelectorAll('.profile-tab').forEach(b=>b.classList.remove('active'));document.querySelectorAll('.profile-pane').forEach(p=>p.classList.remove('active'));btn.classList.add('active');document.getElementById('tab-'+btn.dataset.tab).classList.add('active');}));
+</script>
+</body></html>

@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Admin Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+<div class="sidebar">
+    <div class="brand-logo"><img src="{{ url_for('static', filename='logo.png') }}" alt="UNITY PATH RECOVERY AND COLLECTION SERVICES OPC"></div>
+    <a href="{{ url_for('dashboard') }}">Dashboard</a>
+    <a href="{{ url_for('employees') }}">Employees</a>
+    <a href="{{ url_for('attendance') }}">Attendance</a>
+    <a href="{{ url_for('calendar_view') }}">Calendar</a>
+<a href="{{ url_for('admin_leave_requests') }}">Leave Requests</a>
+    <a href="{{ url_for('payroll') }}">Payroll</a>
+    <a href="{{ url_for('loans') }}">Loan Management</a>
+    <a href="{{ url_for('loan_report') }}">Loan Report</a>
+    <a href="{{ url_for('payroll_settings') }}">Payroll Settings</a>
+    <a href="{{ url_for('payroll_contributions') }}">Contribution Shares</a>
+    <a href="{{ url_for('thirteenth_month_report') }}">13th Month</a>
+    <a href="{{ url_for('logout') }}">Logout</a>
+</div>
+
+<div class="main">
+    <div class="page-header">
+        <div>
+            <h1>Admin Dashboard</h1>
+            <p>Company overview</p>
+        </div>
+    </div>
+
+    <div class="cards">
+        <div class="card"><h3>Total Employees</h3><strong>{{ total_employees }}</strong></div>
+        <div class="card"><h3>Active Employees</h3><strong>{{ active_employees }}</strong></div>
+        <div class="card"><h3>Inactive Employees</h3><strong>{{ inactive_employees }}</strong></div>
+        <div class="card"><h3>Payroll Records</h3><strong>{{ total_payroll }}</strong></div>
+    </div>
+</div>
+</body>
+</html>

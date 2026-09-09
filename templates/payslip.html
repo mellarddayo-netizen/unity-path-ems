@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Payslip - {{ payroll.employee.first_name }} {{ payroll.employee.last_name }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body class="payslip-page">
+<div class="payslip payroll-slip">
+    <div class="payslip-watermark">SYSTEM GENERATED</div>
+
+    <div class="pearlpay-style-header">
+        <div class="company-brand">
+            <img src="{{ url_for('static', filename='logo.png') }}" alt="UNITY PATH RECOVERY AND COLLECTION SERVICES OPC">
+        </div>
+        <div class="payslip-title">
+            <h1>PAYSLIP</h1>
+            <p>
+                Payslip For the period
+                <strong>{{ payroll.period_start.strftime('%B %d').replace(' 0', ' ') }}-{{ payroll.period_end.strftime('%d').lstrip('0') }}, {{ payroll.period_end.strftime('%Y') }}</strong>
+            </p>
+        </div>
+    </div>
+
+    <div class="employee-meta">
+        <div class="meta-row"><span>Name</span><b>:</b><strong>{{ payroll.employee.last_name }}, {{ payroll.employee.first_name }}{% if payroll.employee.middle_name %} {{ payroll.employee.middle_name }}{% endif %}</strong></div>
+        <div class="meta-row"><span>Position</span><b>:</b>{{ payroll.employee.position or '—' }}</div>
+        <div class="meta-row"><span>Branch/Dept</span><b>:</b>{{ payroll.employee.department or '—' }}</div>
+        <div class="meta-row"><span>Employee ID</span><b>:</b>{{ payroll.employee.employee_id }}</div>
+    </div>
+
+    <div class="payslip-grid">
+        <!-- BASIC PAY / ALLOWANCES -->
+        <div class="slip-left">
+            <section class="slip-section">
+                <div class="section-heading"><span>BASIC PAY</span><span>Amount</span></div>
+                <table class="slip-table">
+                    <tr><td>Worked Days <small>{{ payroll.worked_days or 0 }} day{% if (payroll.worked_days or 0) != 1 %}s{% endif %}</small></td><td>₱{{ "{:,.2f}".format((payroll.basic_pay or 0) - (payroll.vl_pay or 0) - (payroll.sl_pay or 0)) }}</td></tr>
+                    <tr><td>VL with Pay <small>{{ payroll.vl_days or 0 }} day{% if (payroll.vl_days or 0) != 1 %}s{% endif %}</small></td><td>₱{{ "{:,.2f}".format(payroll.vl_pay or 0) }}</td></tr>
+                    <tr><td>SL with Pay <small>{{ payroll.sl_days or 0 }} day{% if (payroll.sl_days or 0) != 1 %}s{% endif %}</small></td><td>₱{{ "{:,.2f}".format(payroll.sl_pay or 0) }}</td></tr>
+                    <tr><td>Adjustment Basic</td><td>₱{{ "{:,.2f}".format(payroll.adjustment_addition or 0) }}</td></tr>
+                    <tr class="section-total"><td>TOTAL BASIC</td><td>₱{{ "{:,.2f}".format((payroll.basic_pay or 0) + (payroll.adjustment_addition or 0)) }}</td></tr>
+                </table>
+            </section>
+
+            <section class="slip-section">
+                <div class="section-heading"><span>ALLOWANCES</span><span>Amount</span></div>
+                <table class="slip-table">
+                    <tr><td>Perfect Attendance</td><td>—</td></tr>
+                    <tr><td>Transportation</td><td>₱{{ "{:,.2f}".format(payroll.allowance or 0) }}</td></tr>
+                    <tr><td>Meal Allowance</td><td>—</td></tr>
+                    <tr><td>Birthday Bonus</td><td>—</td></tr>
+                    <tr><td>Load Allowance</td><td>—</td></tr>
+                    <tr><td>Lifestyle</td><td>—</td></tr>
+                    <tr><td>Housing</td><td>—</td></tr>
+                    <tr><td>Utility</td><td>—</td></tr>
+                    <tr><td>Airfare</td><td>—</td></tr>
+                    <tr><td>Other / Incentive</td><td>₱{{ "{:,.2f}".format(payroll.incentive or 0) }}</td></tr>
+                    <tr><td>VL Cash Conversion</td><td>₱{{ "{:,.2f}".format(payroll.vl_conversion or 0) }}</td></tr>
+                    <tr><td>SL Cash Conversion</td><td>₱{{ "{:,.2f}".format(payroll.sl_conversion or 0) }}</td></tr>
+                    <tr class="section-total"><td>TOTAL ALLOWANCE / OTHER EARNINGS</td><td>₱{{ "{:,.2f}".format((payroll.allowance or 0) + (payroll.incentive or 0) + (payroll.vl_conversion or 0) + (payroll.sl_conversion or 0)) }}</td></tr>
+                </table>
+            </section>
+        </div>
+
+        <!-- OVERTIME / DEDUCTIONS -->
+        <div class="slip-right">
+            <section class="slip-section">
+                <div class="section-heading"><span>PREMIUMS &amp; OVERTIME</span><span>Amount</span></div>
+                <table class="slip-table overtime-table">
+                    <tr><td>Sunday Rest Day Premium</td><td>₱{{ "{:,.2f}".format(payroll.rest_day_premium or 0) }}</td></tr>
+                    <tr><td>Holiday Pay / Premium</td><td>₱{{ "{:,.2f}".format(payroll.holiday_pay or 0) }}</td></tr>
+                    <tr><td>Regular OT <small>{{ "%.2f"|format(payroll.regular_ot_hours or 0) }} hrs</small></td><td>₱{{ "{:,.2f}".format(payroll.regular_ot_pay or 0) }}</td></tr>
+                    <tr><td>Holiday OT <small>{{ "%.2f"|format(payroll.holiday_ot_hours or 0) }} hrs</small></td><td>₱{{ "{:,.2f}".format(payroll.holiday_ot_pay or 0) }}</td></tr>
+                    <tr><td>Rest Day OT <small>{{ "%.2f"|format(payroll.rest_day_ot_hours or 0) }} hrs</small></td><td>₱{{ "{:,.2f}".format(payroll.rest_day_ot_pay or 0) }}</td></tr>
+                    <tr><td>Adjustment OT</td><td>—</td></tr>
+                    <tr class="section-total"><td>TOTAL PREMIUMS &amp; OVERTIME</td><td>₱{{ "{:,.2f}".format((payroll.holiday_pay or 0) + (payroll.rest_day_premium or 0) + (payroll.overtime_pay or 0)) }}</td></tr>
+                </table>
+            </section>
+
+            <section class="slip-section deductions-section">
+                <div class="section-heading"><span>DEDUCTIONS</span><span>Amount</span></div>
+                <table class="slip-table">
+                    <tr><td>SSS Contribution</td><td>₱{{ "{:,.2f}".format(payroll.sss or 0) }}</td></tr>
+                    <tr><td>PhilHealth Contribution</td><td>₱{{ "{:,.2f}".format(payroll.philhealth or 0) }}</td></tr>
+                    <tr><td>HDMF Contribution</td><td>₱{{ "{:,.2f}".format(payroll.pagibig or 0) }}</td></tr>
+                    <tr><td>SSS Salary Loan</td><td>₱{{ "{:,.2f}".format(payroll.loan_sss_salary or 0) }}</td></tr>
+                    <tr><td>SSS Calamity Loan</td><td>₱{{ "{:,.2f}".format(payroll.loan_sss_calamity or 0) }}</td></tr>
+                    <tr><td>Pag-IBIG MPL</td><td>₱{{ "{:,.2f}".format(payroll.loan_pagibig_mpl or 0) }}</td></tr>
+                    <tr><td>Pag-IBIG Calamity Loan</td><td>₱{{ "{:,.2f}".format(payroll.loan_pagibig_calamity or 0) }}</td></tr>
+                    <tr><td>Tardy / Late Deduction</td><td>₱{{ "{:,.2f}".format(payroll.late_deduction or 0) }}</td></tr>
+                    <tr><td>Undertime Deduction</td><td>₱{{ "{:,.2f}".format(payroll.undertime_deduction or 0) }}</td></tr>
+                    <tr><td>Withholding Tax</td><td>₱{{ "{:,.2f}".format(payroll.withholding_tax or 0) }}</td></tr>
+                    <tr><td>Adjustment Deduction</td><td>₱{{ "{:,.2f}".format(payroll.adjustment_deduction or 0) }}</td></tr>
+                    <tr><td>Other Deduction</td><td>₱{{ "{:,.2f}".format(payroll.other_deduction or 0) }}</td></tr>
+                    <tr class="section-total"><td>TOTAL DEDUCTIONS</td><td>₱{{ "{:,.2f}".format(payroll.total_deductions or 0) }}</td></tr>
+                </table>
+            </section>
+        </div>
+    </div>
+
+    <div class="gross-net-summary">
+        <div><span>GROSS PAY</span><strong>₱{{ "{:,.2f}".format(payroll.gross_pay or 0) }}</strong></div>
+        <div class="net-summary"><span>NET PAY</span><strong>₱{{ "{:,.2f}".format(payroll.net_pay or 0) }}</strong></div>
+    </div>
+
+    <div class="acknowledgement">
+        <p>I hereby acknowledge the receipt of the above amount:</p>
+        <div class="signature-line">{{ payroll.employee.last_name }}, {{ payroll.employee.first_name }}{% if payroll.employee.middle_name %} {{ payroll.employee.middle_name }}{% endif %}</div>
+        <small>{{ payroll.status }}{% if payroll.pay_date %} · Paid {{ payroll.pay_date.strftime('%B %d, %Y') }}{% endif %}</small>
+    </div>
+
+    <button class="btn print-button" onclick="window.print()">Print Payslip</button>
+</div>
+</body>
+</html>

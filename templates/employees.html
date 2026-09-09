@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Employees</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+<div class="sidebar">
+    <div class="brand-logo"><img src="{{ url_for('static', filename='logo.png') }}" alt="UNITY PATH RECOVERY AND COLLECTION SERVICES OPC"></div>
+    <a href="{{ url_for('dashboard') }}">Dashboard</a>
+    <a href="{{ url_for('employees') }}">Employees</a>
+    <a href="{{ url_for('attendance') }}">Attendance</a>
+    <a href="{{ url_for('calendar_view') }}">Calendar</a>
+<a href="{{ url_for('admin_leave_requests') }}">Leave Requests</a>
+    <a href="{{ url_for('payroll') }}">Payroll</a>
+    <a href="{{ url_for('loans') }}">Loan Management</a>
+    <a href="{{ url_for('loan_report') }}">Loan Report</a>
+    <a href="{{ url_for('payroll_settings') }}">Payroll Settings</a>
+    <a href="{{ url_for('payroll_contributions') }}">Contribution Shares</a>
+    <a href="{{ url_for('thirteenth_month_report') }}">13th Month</a>
+    <a href="{{ url_for('logout') }}">Logout</a>
+</div>
+
+<div class="main">
+    <div class="page-header">
+        <div>
+            <h1>Employees</h1>
+            <p>Employee profiles and government requirements</p>
+        </div>
+        <div>
+            <button class="btn" type="submit" form="employee-export-form">Export Selected</button>
+            <a class="btn primary" href="{{ url_for('add_employee') }}">+ Add Employee</a>
+        </div>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% for category, message in messages %}
+            <div class="alert {{ category }}">{{ message }}</div>
+        {% endfor %}
+    {% endwith %}
+
+    <form id="employee-export-form" method="POST" action="{{ url_for('export_employees_docx') }}">
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th><input type="checkbox" id="select-all-employees" title="Select all"></th>
+                    <th>Photo</th>
+                    <th>Employee ID</th>
+                    <th>Name</th>
+                    <th>Department</th>
+                    <th>Position</th>
+                    <th>Basic Daily Rate</th>
+                    <th>Status</th>
+                    <th>Account</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for employee in employees %}
+                <tr>
+                    <td><input type="checkbox" class="employee-select" name="selected_employee_ids" value="{{ employee.id }}"></td>
+                    <td>
+                        {% if employee.profile_photo %}
+                            <img class="avatar small" src="{{ url_for('static', filename='uploads/profiles/' + employee.profile_photo) }}">
+                        {% else %}
+                            <div class="avatar small placeholder">—</div>
+                        {% endif %}
+                    </td>
+                    <td>{{ employee.employee_id }}</td>
+                    <td>{{ employee.first_name }} {{ employee.last_name }}</td>
+                    <td>{{ employee.department or "—" }}</td>
+                    <td>{{ employee.position or "—" }}</td>
+                    <td>₱{{ "{:,.2f}".format(employee.daily_rate or 0) }}</td>
+                    <td><span class="badge">{{ employee.employment_status }}</span></td>
+                    <td>
+                        {% if employee.user_account %}
+                            <span class="badge success">Created</span>
+                        {% else %}
+                            <a class="btn small" href="{{ url_for('create_employee_account', id=employee.id) }}">Create</a>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <a class="btn small" href="{{ url_for('employee_profile', id=employee.id) }}">View</a>
+                        <a class="btn small" href="{{ url_for('edit_employee', id=employee.id) }}">Edit</a>
+                        <form method="POST" action="{{ url_for('delete_employee', id=employee.id) }}" class="inline" onsubmit="return confirm('Delete this employee?');">
+                            <button class="btn small danger" type="submit">Delete</button>
+                        </form>
+                    </td>
+                </tr>
+            {% else %}
+                <tr><td colspan="9">No employees yet.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    </form>
+</div>
+<script>
+const selectAll = document.getElementById('select-all-employees');
+if (selectAll) {
+  selectAll.addEventListener('change', function() {
+    document.querySelectorAll('.employee-select').forEach(cb => cb.checked = this.checked);
+  });
+}
+const exportForm = document.getElementById('employee-export-form');
+if (exportForm) {
+  exportForm.addEventListener('submit', function(e) {
+    const checked = document.querySelectorAll('.employee-select:checked');
+    if (!checked.length) { e.preventDefault(); alert('Please select at least one employee to export.'); }
+  });
+}
+</script>
+</body>
+</html>

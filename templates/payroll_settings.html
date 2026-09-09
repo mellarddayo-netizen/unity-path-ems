@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Payroll Settings</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+<div class="sidebar">
+    <div class="brand-logo"><img src="{{ url_for('static', filename='logo.png') }}" alt="UNITY PATH RECOVERY AND COLLECTION SERVICES OPC"></div>
+    <a href="{{ url_for('dashboard') }}">Dashboard</a>
+    <a href="{{ url_for('employees') }}">Employees</a>
+    <a href="{{ url_for('attendance') }}">Attendance</a>
+    <a href="{{ url_for('calendar_view') }}">Calendar</a>
+<a href="{{ url_for('admin_leave_requests') }}">Leave Requests</a>
+    <a href="{{ url_for('payroll') }}">Payroll</a>
+    <a href="{{ url_for('loans') }}">Loan Management</a>
+    <a href="{{ url_for('loan_report') }}">Loan Report</a>
+    <a href="{{ url_for('payroll_settings') }}">Payroll Settings</a>
+    <a href="{{ url_for('payroll_contributions') }}">Contribution Shares</a>
+    <a href="{{ url_for('thirteenth_month_report') }}">13th Month</a>
+    <a href="{{ url_for('logout') }}">Logout</a>
+</div>
+<div class="main">
+    <h1>Payroll Settings</h1>
+    <div class="card">
+        <form method="POST">
+            <h2>Work Schedule</h2>
+            <div class="form-grid">
+                <div><label>Working Days / Month</label><input type="number" step="0.01" name="working_days_per_month" value="{{ settings.working_days_per_month }}" required></div>
+                <div><label>Hours / Day</label><input type="number" step="0.01" name="hours_per_day" value="{{ settings.hours_per_day }}" required></div>
+                <div><label>OT Multiplier</label><input type="number" step="0.01" name="overtime_multiplier" value="{{ settings.overtime_multiplier }}" required></div>
+            </div>
+
+            <h2>Automatic Philippine Statutory Deductions</h2>
+            <div class="info-box">
+                SSS, PhilHealth, Pag-IBIG and BIR withholding tax are now calculated automatically by the payroll engine.
+                Do not enter flat percentage rates here. The engine uses the current statutory tables/rules configured in the application.
+            </div>
+            <div class="form-grid">
+                <div><label>SSS Employee Rate</label><input value="5% of MSC (2025 schedule)" disabled></div>
+                <div><label>PhilHealth Employee Share</label><input value="50% of 5% premium; floor ₱10,000 / ceiling ₱100,000" disabled></div>
+                <div><label>Pag-IBIG Employee Rate</label><input value="1% / 2%; max fund salary ₱5,000" disabled></div>
+                <div><label>BIR Withholding Tax</label><input value="Semi-monthly Annex E table" disabled></div>
+            </div>
+            <div class="info-box">
+                For partial attendance/pay, the monthly statutory obligation is calculated from the employee's Basic Daily Rate × working days/month, then prorated to the actual gross paid in the cutoff. This prevents a short payroll from taking a full monthly contribution.
+            </div>
+            <button class="btn primary" type="submit">Save Settings</button>
+        </form>
+    </div>
+</div>
+</body>
+</html>

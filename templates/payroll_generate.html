@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Generate Payroll</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        .cutoff-card { border:1px solid #d9e1ec; border-radius:10px; padding:18px; margin-top:14px; }
+        .cutoff-card input { margin-right:8px; }
+        .cutoff-card label { display:block; cursor:pointer; }
+        .rule-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:15px; }
+        .rule-box { background:#f7f9fc; border:1px solid #e1e7ef; border-radius:8px; padding:14px; }
+        .rule-box h3 { margin-top:0; }
+        @media (max-width:800px) { .rule-grid { grid-template-columns:1fr; } }
+    </style>
+</head>
+<body>
+<div class="sidebar">
+    <div class="brand-logo"><img src="{{ url_for('static', filename='logo.png') }}" alt="UNITY PATH RECOVERY AND COLLECTION SERVICES OPC"></div>
+    <a href="{{ url_for('dashboard') }}">Dashboard</a>
+    <a href="{{ url_for('employees') }}">Employees</a>
+    <a href="{{ url_for('attendance') }}">Attendance</a>
+    <a href="{{ url_for('calendar_view') }}">Calendar</a>
+    <a href="{{ url_for('payroll') }}">Payroll</a>
+    <a href="{{ url_for('loans') }}">Loan Management</a>
+    <a href="{{ url_for('loan_report') }}">Loan Report</a>
+    <a href="{{ url_for('payroll_settings') }}">Payroll Settings</a>
+    <a href="{{ url_for('payroll_contributions') }}">Contribution Shares</a>
+    <a href="{{ url_for('thirteenth_month_report') }}">13th Month</a>
+    <a href="{{ url_for('logout') }}">Logout</a>
+</div>
+<div class="main">
+    <h1>Generate Payroll</h1>
+    <div class="card">
+        <form method="POST">
+            <h2>Select Payroll Month</h2>
+            <div class="form-grid">
+                <div>
+                    <label>Month</label>
+                    <select name="month" required>
+                        <option value="">Select Month</option>
+                        {% for m, name in [(1,'January'),(2,'February'),(3,'March'),(4,'April'),(5,'May'),(6,'June'),(7,'July'),(8,'August'),(9,'September'),(10,'October'),(11,'November'),(12,'December')] %}
+                            <option value="{{ m }}" {% if selected_month == m %}selected{% endif %}>{{ name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label>Year</label>
+                    <select name="year" required>
+                        <option value="">Select Year</option>
+                        {% for y in range(2025, 2036) %}
+                            <option value="{{ y }}" {% if selected_year == y %}selected{% endif %}>{{ y }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <h2 style="margin-top:24px;">Choose Payroll</h2>
+            <div class="cutoff-card">
+                <label>
+                    <input type="radio" name="payroll_type" value="first" required {% if selected_payroll == 'first' %}checked{% endif %}>
+                    <b>1st Payroll — Date 1–15</b>
+                </label>
+                <small>Salary and attendance from the 1st to the 15th. No mandatory employee SSS, PhilHealth, or Pag-IBIG deduction.</small>
+            </div>
+            <div class="cutoff-card">
+                <label>
+                    <input type="radio" name="payroll_type" value="second" required {% if selected_payroll == 'second' %}checked{% endif %}>
+                    <b>2nd Payroll — Date 16–Last Day</b>
+                </label>
+                <small>Salary and attendance from the 16th to the last day of the selected month. Monthly mandatory employee contributions for that month are applied/finalized here.</small>
+            </div>
+
+            <h2 style="margin-top:24px;">Pay Date</h2>
+            <div class="form-grid">
+                <div>
+                    <label>Pay Date</label>
+                    <input type="date" name="pay_date" value="{{ pay_date.strftime('%Y-%m-%d') if pay_date else '' }}">
+                    <small>If blank, the payroll period end date will be used. Pay Date is only the payment-date record.</small>
+                </div>
+            </div>
+
+            <div class="rule-grid">
+                <div class="rule-box">
+                    <h3>1st Payroll</h3>
+                    <ul>
+                        <li>Attendance: 1–15</li>
+                        <li>Basic pay: actual completed attendance</li>
+                        <li>Late: computed</li>
+                        <li>Undertime: computed</li>
+                        <li>Approved OT: computed</li>
+                        <li>SSS / PhilHealth / Pag-IBIG: <b>₱0</b></li>
+                    </ul>
+                </div>
+                <div class="rule-box">
+                    <h3>2nd Payroll</h3>
+                    <ul>
+                        <li>Attendance: 16–last day</li>
+                        <li>Basic pay: actual completed attendance</li>
+                        <li>Late: computed</li>
+                        <li>Undertime: computed</li>
+                        <li>Approved OT: computed</li>
+                        <li>Monthly SSS / PhilHealth / Pag-IBIG: <b>applied/finalized</b></li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="info-box" style="margin-top:18px;">
+                <b>Attendance rule:</b> No Time In + No Time Out = Absent (0 paid day). Time In without Time Out is incomplete and should be reviewed by Admin.
+                Early arrival does not offset undertime. Overtime starts after 5:00 PM and is paid only when approved by Admin.
+                Daily allowance and daily incentive are based on completed attendance days.
+            </div>
+
+            <div class="actions">
+                <a class="btn" href="{{ url_for('payroll') }}">Cancel</a>
+                <button class="btn primary" type="submit">Generate Selected Payroll</button>
+            </div>
+        </form>
+    </div>
+</div>
+</body>
+</html>

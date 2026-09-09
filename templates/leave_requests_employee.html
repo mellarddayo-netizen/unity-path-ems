@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8"><title>Leave Requests</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+<style>.leave-cards{display:flex;gap:14px;flex-wrap:wrap}.leave-card{min-width:190px}.status-pending{font-weight:700}.status-approved{font-weight:700}.status-rejected{font-weight:700}.small-note{font-size:12px;color:#64748b}</style>
+</head>
+<body>
+<div class="sidebar">
+<div class="brand-logo"><img src="{{ url_for('static', filename='logo.png') }}" alt="UNITY PATH RECOVERY AND COLLECTION SERVICES OPC"></div>
+<a href="{{ url_for('employee_dashboard') }}">Dashboard</a>
+<a href="{{ url_for('employee_self_profile') }}">My Profile</a>
+<a href="{{ url_for('employee_attendance') }}">My Attendance</a>
+<a href="{{ url_for('employee_leave_requests') }}">Leave Requests</a>
+<a href="{{ url_for('employee_payroll') }}">My Payroll</a>
+<a href="{{ url_for('logout') }}">Logout</a>
+</div>
+<div class="main">
+<div class="page-header"><div><h1>Leave Requests</h1><p>Request VL or SL. Approved requests are automatically reflected in Attendance and paid in payroll.</p></div></div>
+{% with messages = get_flashed_messages(with_categories=true) %}{% for category,message in messages %}<div class="alert {{ category }}">{{ message }}</div>{% endfor %}{% endwith %}
+<div class="cards leave-cards">
+<div class="card leave-card"><h3>VL Balance</h3><strong>{{ "%.1f"|format(balances.vl) }} day(s)</strong><div class="small-note">Entitled: {{ "%.1f"|format(balances.vl_entitlement) }}</div></div>
+<div class="card leave-card"><h3>SL Balance</h3><strong>{{ "%.1f"|format(balances.sl) }} day(s)</strong><div class="small-note">Entitled: {{ "%.1f"|format(balances.sl_entitlement) }}</div></div>
+</div>
+<div class="card">
+<h2>New Leave Request</h2>
+<form method="POST">
+<div class="form-grid">
+<div><label>Leave Type</label><select name="leave_type" required><option value="VL">VL — Vacation Leave</option><option value="SL">SL — Sick Leave</option></select></div>
+<div><label>Start Date</label><input type="date" name="start_date" min="{{ employee.regularization_date.isoformat() if employee.regularization_date else '' }}" required></div>
+<div><label>End Date</label><input type="date" name="end_date" min="{{ employee.regularization_date.isoformat() if employee.regularization_date else '' }}" required></div>
+</div>
+<label>Reason</label><textarea name="reason" rows="3" placeholder="Optional reason"></textarea>
+<div class="info-box">Only scheduled Monday–Friday, non-holiday dates consume VL/SL credits. Saturday is not deducted from leave credits, and Sunday is the official rest day.</div>
+<button class="btn primary" type="submit">Submit Leave Request</button>
+</form>
+</div>
+<div class="card table-container">
+<h2>My Requests</h2>
+<table><thead><tr><th>Type</th><th>Period</th><th>Days</th><th>Reason</th><th>Status</th><th>Admin Remarks</th></tr></thead><tbody>
+{% for r in leave_requests %}
+<tr><td><b>{% if r.leave_type == "VL" %}Vacation Leave (VL){% elif r.leave_type == "SL" %}Sick Leave (SL){% else %}{{ r.leave_type }}{% endif %}</b></td><td>{{ r.start_date.strftime('%b %d, %Y') }} – {{ r.end_date.strftime('%b %d, %Y') }}</td><td>{{ ((r.end_date-r.start_date).days + 1) }}</td><td>{{ r.reason or '—' }}</td><td class="status-{{ r.status|lower }}">{{ r.status }}</td><td>{{ r.admin_remarks or '—' }}</td></tr>
+{% else %}<tr><td colspan="6">No leave requests yet.</td></tr>{% endfor %}
+</tbody></table>
+</div>
+</div></body></html>

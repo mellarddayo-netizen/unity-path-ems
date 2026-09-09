@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Contribution Shares</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+<div class="sidebar">
+    <div class="brand-logo"><img src="{{ url_for('static', filename='logo.png') }}" alt="UNITY PATH RECOVERY AND COLLECTION SERVICES OPC"></div>
+    <a href="{{ url_for('dashboard') }}">Dashboard</a>
+    <a href="{{ url_for('employees') }}">Employees</a>
+    <a href="{{ url_for('attendance') }}">Attendance</a>
+    <a href="{{ url_for('calendar_view') }}">Calendar</a>
+<a href="{{ url_for('admin_leave_requests') }}">Leave Requests</a>
+    <a href="{{ url_for('payroll') }}">Payroll</a>
+    <a href="{{ url_for('loans') }}">Loan Management</a>
+    <a href="{{ url_for('loan_report') }}">Loan Report</a>
+    <a href="{{ url_for('payroll_settings') }}">Payroll Settings</a>
+    <a href="{{ url_for('payroll_contributions') }}">Contribution Shares</a>
+    <a href="{{ url_for('thirteenth_month_report') }}">13th Month</a>
+    <a href="{{ url_for('logout') }}">Logout</a>
+</div>
+
+<div class="main">
+    <div class="page-header">
+        <div>
+            <h1>Employee & Company Shares</h1>
+            <p>Monthly statutory contribution breakdown for all active employees.</p>
+        </div>
+    </div>
+
+    <div class="card">
+        <form method="GET" class="form-grid">
+            <div class="form-group">
+                <label>Contribution Month</label>
+                <input type="month" name="month" value="{{ "%04d-%02d"|format(year, month) }}" required>
+            </div>
+            <div class="form-group" style="align-self:end">
+                <button class="btn primary" type="submit">View Month</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="info-box">
+        <b>Selected month:</b> {{ "%02d"|format(month) }}/{{ year }}.
+        Employee Share is the statutory amount due for the employee; <b>Actual Deducted</b> is what was actually taken from the 2nd payroll.
+        Any difference is shown as <b>Uncollected</b>. Company Share is the employer expense and is not deducted from Net Pay.
+    </div>
+
+
+    <div class="card table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th rowspan="2">Employee</th>
+                    <th rowspan="2">SSS Actual Remuneration</th><th rowspan="2">SSS MSC</th><th rowspan="2">PhilHealth MBS</th><th rowspan="2">Pag-IBIG Compensation</th>
+                    <th colspan="3">SSS</th>
+                    <th colspan="3">PhilHealth</th>
+                    <th colspan="3">Pag-IBIG</th>
+                </tr>
+                <tr>
+                    <th>Employee Due</th><th>Actual Deducted</th><th>Company</th>
+                    <th>Employee Due</th><th>Actual Deducted</th><th>Company</th>
+                    <th>Employee Due</th><th>Actual Deducted</th><th>Company</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for row in rows %}
+                <tr>
+                    <td>
+                        <b>{{ row.employee.first_name }} {{ row.employee.last_name }}</b><br>
+                        <small>{{ row.employee.employee_id }}</small>
+                    </td>
+                    <td>₱{{ "{:,.2f}".format(row.sss_remuneration) }}</td>
+                    <td>₱{{ "{:,.2f}".format(row.sss_msc) }}</td>
+                    <td>₱{{ "{:,.2f}".format(row.philhealth_basic_salary) }}</td>
+                    <td>₱{{ "{:,.2f}".format(row.pagibig_monthly_compensation) }}</td>
+                    <td>₱{{ "{:,.2f}".format(row.sss_employee) }}</td>
+                    <td>₱{{ "{:,.2f}".format(row.sss_collected) }}</td>
+                    <td>₱{{ "{:,.2f}".format(row.sss_employer) }}</td>
+                    <td>₱{{ "{:,.2f}".format(row.philhealth_employee) }}</td>
+                    <td>₱{{ "{:,.2f}".format(row.philhealth_collected) }}</td>
+                    <td>₱{{ "{:,.2f}".format(row.philhealth_employer) }}</td>
+                    <td>₱{{ "{:,.2f}".format(row.pagibig_employee) }}</td>
+                    <td>₱{{ "{:,.2f}".format(row.pagibig_collected) }}</td>
+                    <td>₱{{ "{:,.2f}".format(row.pagibig_employer) }}</td>
+                </tr>
+            {% else %}
+                <tr><td colspan="14">No active employees found.</td></tr>
+            {% endfor %}
+            </tbody>
+            {% if rows %}
+            <tfoot>
+                <tr class="total-row">
+                    <td><b>TOTAL</b></td>
+                    <td colspan="4">—</td>
+                    <td><b>₱{{ "{:,.2f}".format(totals.sss_employee) }}</b></td>
+                    <td><b>₱{{ "{:,.2f}".format(totals.sss_collected) }}</b></td>
+                    <td><b>₱{{ "{:,.2f}".format(totals.sss_employer) }}</b></td>
+                    <td><b>₱{{ "{:,.2f}".format(totals.philhealth_employee) }}</b></td>
+                    <td><b>₱{{ "{:,.2f}".format(totals.philhealth_collected) }}</b></td>
+                    <td><b>₱{{ "{:,.2f}".format(totals.philhealth_employer) }}</b></td>
+                    <td><b>₱{{ "{:,.2f}".format(totals.pagibig_employee) }}</b></td>
+                    <td><b>₱{{ "{:,.2f}".format(totals.pagibig_collected) }}</b></td>
+                    <td><b>₱{{ "{:,.2f}".format(totals.pagibig_employer) }}</b></td>
+                </tr>
+            </tfoot>
+            {% endif %}
+        </table>
+    </div>
+
+    <div class="two-column">
+        <div class="card">
+            <h2>Total Employee Share</h2>
+            <div class="net-pay-box">
+                EMPLOYEE
+                <strong>₱{{ "{:,.2f}".format(totals.employee_total) }}</strong>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Total Company Share</h2>
+            <div class="net-pay-box">
+                COMPANY
+                <strong>₱{{ "{:,.2f}".format(totals.company_total) }}</strong>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Monthly Contribution Summary</h2>
+        <table>
+            <tr>
+                <td><b>Total Employee Share Due</b></td>
+                <td>₱{{ "{:,.2f}".format(totals.employee_total) }}</td>
+            </tr>
+            <tr>
+                <td><b>Total Company Share</b></td>
+                <td>₱{{ "{:,.2f}".format(totals.company_total) }}</td>
+            </tr>
+            <tr class="total-row">
+                <td><b>Total Actually Collected + Company Share</b></td>
+                <td><b>₱{{ "{:,.2f}".format(totals.employee_collected + totals.company_total) }}</b></td>
+            </tr>
+            <tr>
+                <td><b>Employee Share Actually Collected</b></td>
+                <td>₱{{ "{:,.2f}".format(totals.employee_collected) }}</td>
+            </tr>
+            <tr>
+                <td><b>Employee Share Uncollected</b></td>
+                <td>₱{{ "{:,.2f}".format(totals.employee_uncollected) }}</td>
+            </tr>
+        </table>
+    </div>
+</div>
+</body>
+</html>

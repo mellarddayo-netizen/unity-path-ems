@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Edit Payroll</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+<div class="sidebar">
+    <div class="brand-logo"><img src="{{ url_for('static', filename='logo.png') }}" alt="UNITY PATH RECOVERY AND COLLECTION SERVICES OPC"></div>
+    <a href="{{ url_for('dashboard') }}">Dashboard</a>
+    <a href="{{ url_for('employees') }}">Employees</a>
+    <a href="{{ url_for('attendance') }}">Attendance</a>
+    <a href="{{ url_for('calendar_view') }}">Calendar</a>
+    <a href="{{ url_for('payroll') }}">Payroll</a>
+    <a href="{{ url_for('loans') }}">Loan Management</a>
+    <a href="{{ url_for('loan_report') }}">Loan Report</a>
+    <a href="{{ url_for('payroll_settings') }}">Payroll Settings</a>
+    <a href="{{ url_for('payroll_contributions') }}">Contribution Shares</a>
+    <a href="{{ url_for('thirteenth_month_report') }}">13th Month</a>
+    <a href="{{ url_for('logout') }}">Logout</a>
+</div>
+<div class="main">
+    <div class="page-header">
+        <div>
+            <h1>Edit Individual Payroll</h1>
+            <p>{{ payroll.employee.first_name }} {{ payroll.employee.last_name }} · {{ payroll.employee.employee_id }}</p>
+            <p>{{ payroll.period_start.strftime('%B %d, %Y') }} – {{ payroll.period_end.strftime('%B %d, %Y') }}</p>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="info-box">
+            Basic Pay and OT are recalculated from Attendance.<br>
+            Daily Allowance and Daily Incentive are automatically based on the employee profile × completed attendance days.<br>
+            Government deductions remain automatic. Company shares never reduce employee Net Pay.
+        </div>
+
+        <form method="POST">
+            <h2>Government Loan Breakdown</h2>
+            <div class="form-grid">
+                <div><b>SSS Salary Loan</b><br>₱{{ "{:,.2f}".format(payroll.loan_sss_salary or 0) }}</div>
+                <div><b>SSS Calamity Loan</b><br>₱{{ "{:,.2f}".format(payroll.loan_sss_calamity or 0) }}</div>
+                <div><b>Pag-IBIG MPL</b><br>₱{{ "{:,.2f}".format(payroll.loan_pagibig_mpl or 0) }}</div>
+                <div><b>Pag-IBIG Calamity Loan</b><br>₱{{ "{:,.2f}".format(payroll.loan_pagibig_calamity or 0) }}</div>
+            </div>
+
+            <h2>Payroll Adjustment</h2>
+            <div class="form-grid">
+                <div>
+                    <label>Adjustment Addition</label>
+                    <input type="number" step="0.01" name="adjustment_addition"
+                           value="{{ payroll.adjustment_addition or 0 }}">
+                    <small>Extra earning for this payroll only.</small>
+                </div>
+                <div>
+                    <label>Adjustment Deduction</label>
+                    <input type="number" step="0.01" min="0" name="adjustment_deduction"
+                           value="{{ payroll.adjustment_deduction or 0 }}">
+                    <small>One-time deduction for this payroll only.</small>
+                </div>
+                <div>
+                    <label>Government Loan Deduction</label>
+                    <input type="text" readonly value="₱{{ '{:,.2f}'.format(payroll.loan or 0) }}">
+                    <small>Managed automatically from active SSS/Pag-IBIG loans.</small>
+                </div>
+                <div>
+                    <label>Other Deduction</label>
+                    <input type="number" step="0.01" min="0" name="other_deduction"
+                           value="{{ payroll.other_deduction or 0 }}">
+                </div>
+            </div>
+
+            <label>Adjustment Note</label>
+            <textarea name="adjustment_note" rows="3">{{ payroll.adjustment_note or '' }}</textarea>
+
+            <div class="actions">
+                <a class="btn" href="{{ url_for('view_payroll', id=payroll.id) }}">Cancel</a>
+                <button class="btn primary" type="submit">Save & Recalculate Payroll</button>
+            </div>
+        </form>
+    </div>
+</div>
+</body>
+</html>

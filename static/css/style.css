@@ -1,0 +1,351 @@
+* { box-sizing: border-box; }
+body {
+    margin: 0;
+    font-family: Arial, Helvetica, sans-serif;
+    background: #f5f7fb;
+    color: #1f2937;
+}
+.sidebar {
+    position: fixed;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 230px;
+    background: #111827;
+    color: white;
+    padding: 25px 16px;
+}
+.brand-logo {
+    width: 100%;
+    padding: 4px 2px 18px;
+    margin-bottom: 10px;
+    border-bottom: 1px solid rgba(201,162,39,.45);
+}
+.brand-logo img {
+    display: block;
+    width: 100%;
+    max-width: 196px;
+    height: auto;
+    border-radius: 10px;
+}
+.sidebar h2 { margin: 0 0 25px; }
+.sidebar a {
+    display: block;
+    color: #d1d5db;
+    text-decoration: none;
+    padding: 11px 12px;
+    border-radius: 7px;
+    margin-bottom: 4px;
+}
+.sidebar a:hover { background: #1f2937; color: white; }
+.main {
+    margin-left: 230px;
+    padding: 30px;
+    min-height: 100vh;
+}
+.page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 20px;
+    margin-bottom: 25px;
+}
+.page-header h1 { margin-bottom: 5px; }
+.page-header p { color: #6b7280; margin-top: 0; }
+.card {
+    background: white;
+    border-radius: 12px;
+    padding: 22px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 10px rgba(0,0,0,.05);
+}
+.cards {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 18px;
+}
+.cards .card { margin: 0; }
+.cards strong { font-size: 30px; }
+.two-column {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 20px;
+}
+.form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 15px;
+}
+label {
+    display: block;
+    font-weight: 600;
+    margin: 10px 0 6px;
+}
+input, select, textarea {
+    width: 100%;
+    padding: 10px 11px;
+    border: 1px solid #d1d5db;
+    border-radius: 7px;
+    font: inherit;
+    background: white;
+}
+textarea { resize: vertical; }
+button, .btn {
+    display: inline-block;
+    border: 0;
+    padding: 10px 14px;
+    border-radius: 7px;
+    text-decoration: none;
+    cursor: pointer;
+    background: #e5e7eb;
+    color: #111827;
+    font: inherit;
+}
+.btn.primary { background: #2563eb; color: white; }
+.btn.danger { background: #dc2626; color: white; }
+.btn.small { padding: 6px 9px; font-size: 13px; }
+.actions { display: flex; gap: 10px; align-items: center; margin-top: 20px; }
+.inline { display: inline; }
+.table-container { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; }
+th, td { padding: 11px 9px; border-bottom: 1px solid #e5e7eb; text-align: left; vertical-align: middle; }
+th { background: #f9fafb; }
+.badge {
+    display: inline-block;
+    padding: 5px 9px;
+    border-radius: 999px;
+    background: #e5e7eb;
+    font-size: 12px;
+}
+.badge.success { background: #dcfce7; color: #166534; }
+.alert {
+    padding: 11px 14px;
+    border-radius: 7px;
+    margin-bottom: 15px;
+    background: #eef2ff;
+}
+.alert.danger { background: #fee2e2; color: #991b1b; }
+.alert.success { background: #dcfce7; color: #166534; }
+.alert.warning { background: #fef3c7; color: #92400e; }
+.info-box {
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    padding: 12px;
+    border-radius: 7px;
+    margin: 15px 0;
+}
+.profile-header {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+}
+.photo-2x2 {
+    width: 150px;
+    height: 150px;
+    object-fit: cover;
+    border-radius: 5px;
+    border: 1px solid #d1d5db;
+}
+.avatar {
+    width: 52px;
+    height: 52px;
+    object-fit: cover;
+    border-radius: 50%;
+}
+.avatar.small {
+    width: 42px;
+    height: 42px;
+}
+.placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #e5e7eb;
+    color: #6b7280;
+}
+.narrow { max-width: 650px; }
+.stats-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 15px;
+}
+.stats-row div {
+    background: #f9fafb;
+    padding: 15px;
+    border-radius: 8px;
+}
+.stats-row span, .stats-row b { display: block; }
+.stats-row span { color: #6b7280; margin-bottom: 6px; }
+.total-row { background: #f9fafb; }
+.net-pay-box {
+    margin: 20px 0;
+    padding: 25px;
+    border-radius: 10px;
+    background: #111827;
+    color: white;
+    font-size: 20px;
+    display: flex;
+    justify-content: space-between;
+}
+.net-pay-box strong { font-size: 28px; }
+.login-page {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.login-card {
+    width: 420px;
+    background: white;
+    padding: 30px;
+    border-radius: 12px;
+    box-shadow: 0 5px 30px rgba(0,0,0,.1);
+}
+.login-brand { text-align: center; margin-bottom: 14px; }
+.login-brand img { width: 100%; max-width: 340px; height: auto; border-radius: 12px; }
+.login-card h1 { margin-top: 0; margin-bottom: 5px; }
+.login-subtitle { color: #6b7280; font-size: 12px; margin: 0 0 18px; text-align: center; }
+.login-card .btn { width: 100%; margin-top: 15px; }
+.payslip-page { background: #e5e7eb; padding: 30px; }
+.payslip {
+    max-width: 950px;
+    margin: auto;
+    background: white;
+    padding: 35px;
+}
+.payslip-header { text-align: center; margin-bottom: 25px; }
+.print-button { margin-top: 20px; }
+.date-filter { display: flex; gap: 8px; }
+@media (max-width: 1000px) {
+    .cards { grid-template-columns: repeat(2, 1fr); }
+    .two-column { grid-template-columns: 1fr; }
+}
+@media (max-width: 700px) {
+    .sidebar { position: static; width: auto; }
+    .main { margin-left: 0; padding: 15px; }
+    .form-grid, .cards, .stats-row { grid-template-columns: 1fr; }
+    .page-header { flex-direction: column; align-items: flex-start; }
+}
+@media print {
+    .print-button, .sidebar { display: none; }
+    .payslip-page { background: white; padding: 0; }
+    .payslip { max-width: none; box-shadow: none; }
+}
+
+/* PearlPay-inspired payroll payslip layout */
+.payroll-slip {
+    position: relative;
+    width: 210mm;
+    min-height: 297mm;
+    max-width: none;
+    box-sizing: border-box;
+    padding: 22mm 16mm 16mm;
+    color: #111;
+    font-family: Arial, Helvetica, sans-serif;
+    overflow: hidden;
+}
+.payslip-watermark {
+    position: absolute;
+    left: 50%;
+    top: 53%;
+    transform: translate(-50%, -50%) rotate(-38deg);
+    font-size: 64px;
+    font-weight: 800;
+    letter-spacing: 8px;
+    color: rgba(31, 68, 120, .10);
+    white-space: nowrap;
+    pointer-events: none;
+    z-index: 0;
+}
+.pearlpay-style-header,
+.employee-meta,
+.payslip-grid,
+.gross-net-summary,
+.acknowledgement,
+.print-button { position: relative; z-index: 1; }
+.pearlpay-style-header {
+    display: grid;
+    grid-template-columns: 205px 1fr;
+    align-items: center;
+    border-bottom: 2px solid #1f4478;
+    padding-bottom: 8px;
+    margin-bottom: 9px;
+}
+.company-brand {
+    display: flex;
+    align-items: center;
+    min-height: 52px;
+}
+.company-brand img {
+    display: block;
+    width: 190px;
+    height: auto;
+    max-height: 62px;
+    object-fit: contain;
+}
+.payslip-title { text-align: center; padding-right: 10px; }
+.payslip-title h1 { margin: 0; font-size: 20px; letter-spacing: .5px; }
+.payslip-title p { margin: 5px 0 0; font-size: 13px; }
+.employee-meta { margin: 4px 0 14px; font-size: 11px; }
+.meta-row { display: grid; grid-template-columns: 90px 12px 1fr; line-height: 17px; }
+.meta-row strong { font-size: 12px; }
+.payslip-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 38px; }
+.slip-section { margin-bottom: 15px; }
+.section-heading {
+    display: flex;
+    justify-content: space-between;
+    border-bottom: 1.5px solid #111;
+    padding: 0 0 3px;
+    font-weight: 800;
+    font-size: 11px;
+}
+.slip-table { width: 100%; border-collapse: collapse; font-size: 10px; }
+.slip-table td { padding: 2px 4px; border-bottom: 1px solid #d6d6d6; line-height: 13px; }
+.slip-table td:first-child { width: 72%; }
+.slip-table td:last-child { text-align: right; white-space: nowrap; }
+.slip-table small { color: #555; font-size: 8.5px; margin-left: 5px; }
+.slip-table .section-total td {
+    border-top: 1.5px solid #111;
+    border-bottom: 0;
+    padding-top: 4px;
+    font-weight: 800;
+    font-size: 10.5px;
+}
+.overtime-table td { padding-top: 2px; padding-bottom: 2px; }
+.deductions-section { margin-top: 3px; }
+.gross-net-summary {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 22px;
+    margin-top: 8px;
+}
+.gross-net-summary > div {
+    border-top: 2px solid #111;
+    border-bottom: 2px solid #111;
+    padding: 8px 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 12px;
+}
+.gross-net-summary strong { font-size: 16px; }
+.gross-net-summary .net-summary { border: 2px solid #111; padding: 10px 12px; }
+.gross-net-summary .net-summary strong { font-size: 19px; }
+.acknowledgement { margin-top: 28px; text-align: center; font-size: 11px; }
+.acknowledgement p { margin-bottom: 38px; }
+.signature-line {
+    display: inline-block;
+    min-width: 230px;
+    border-bottom: 1px solid #111;
+    padding: 0 12px 3px;
+    font-weight: 700;
+}
+.acknowledgement small { display: block; margin-top: 5px; color: #555; }
+.payroll-slip .print-button { margin-top: 18px; }
+@media print {
+    @page { size: A4 portrait; margin: 0; }
+    .payroll-slip { width: 210mm; min-height: 297mm; padding: 17mm 14mm 12mm; }
+    .print-button { display: none !important; }
+    .payslip-page { background: white; padding: 0; }
+    .payslip { box-shadow: none; }
+}

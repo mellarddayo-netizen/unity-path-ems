@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>Final Payslip</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}"></head>
+<body>
+<div class="main">
+<div class="page-header"><div><h1>FINAL PAYSLIP</h1>
+<p>{{ final_pay.employee.first_name }} {{ final_pay.employee.last_name }} · {{ final_pay.employee.employee_id }}</p>
+<p>Separation: {{ final_pay.separation_date.strftime('%B %d, %Y') }}</p></div>
+<span class="badge">{{ final_pay.status }}</span></div>
+
+<div class="two-column">
+<div class="card"><h2>Earnings</h2>
+<p>Unpaid Basic Pay <b>₱{{ "{:,.2f}".format(final_pay.basic_pay or 0) }}</b></p>
+<p>Overtime Pay <b>₱{{ "{:,.2f}".format(final_pay.overtime_pay or 0) }}</b></p>
+<p>Pro-rated 13th Month <b>₱{{ "{:,.2f}".format(final_pay.thirteenth_month or 0) }}</b></p>
+<hr><p><b>Gross Pay</b> <b>₱{{ "{:,.2f}".format(final_pay.gross_pay or 0) }}</b></p>
+</div>
+
+<div class="card"><h2>Employee Deductions</h2>
+<p>SSS <b>₱{{ "{:,.2f}".format(final_pay.sss_employee or 0) }}</b></p>
+<p>PhilHealth <b>₱{{ "{:,.2f}".format(final_pay.philhealth_employee or 0) }}</b></p>
+<p>Pag-IBIG <b>₱{{ "{:,.2f}".format(final_pay.pagibig_employee or 0) }}</b></p>
+<p>Withholding Tax <b>₱{{ "{:,.2f}".format(final_pay.withholding_tax or 0) }}</b></p>
+<p>Total Actual Deductions <b>₱{{ "{:,.2f}".format(final_pay.actual_deductions or 0) }}</b></p>
+<hr><p><b>NET FINAL PAY</b> <b>₱{{ "{:,.2f}".format(final_pay.net_pay or 0) }}</b></p>
+{% if final_pay.uncollected_deductions %}
+<p class="alert warning">Uncollected statutory deductions: ₱{{ "{:,.2f}".format(final_pay.uncollected_deductions) }}</p>
+{% endif %}
+</div>
+</div>
+
+<div class="card"><h2>Company Contributions</h2>
+<p>SSS Employer <b>₱{{ "{:,.2f}".format(final_pay.sss_employer or 0) }}</b></p>
+<p>PhilHealth Employer <b>₱{{ "{:,.2f}".format(final_pay.philhealth_employer or 0) }}</b></p>
+<p>Pag-IBIG Employer <b>₱{{ "{:,.2f}".format(final_pay.pagibig_employer or 0) }}</b></p>
+<p><b>These amounts are company expense and are NOT deducted from Net Final Pay.</b></p>
+</div>
+
+{% if final_pay.status == 'Draft' %}
+<form method="POST" action="{{ url_for('approve_final_pay', id=final_pay.id) }}"><button class="btn primary">Approve</button></form>
+{% elif final_pay.status == 'Approved' %}
+<form method="POST" action="{{ url_for('paid_final_pay', id=final_pay.id) }}"><button class="btn primary">Mark as Paid</button></form>
+{% endif %}
+</div></body></html>
