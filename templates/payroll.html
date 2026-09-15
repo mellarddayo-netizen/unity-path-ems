@@ -4,6 +4,15 @@
     <meta charset="UTF-8">
     <title>Payroll</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        .email-status { display:inline-block; padding:4px 8px; border-radius:999px; font-size:12px; font-weight:600; }
+        .email-sent { background:#dff5e5; color:#146c2e; }
+        .email-pending { background:#fff3cd; color:#7a5b00; }
+        .email-error { color:#a61b1b; font-size:11px; margin-top:4px; max-width:180px; }
+        .email-toolbar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+        .col-filter { width:100%; box-sizing:border-box; }
+        select.col-filter { min-height:32px; padding:6px 8px; border:1px solid #d5dbe7; border-radius:6px; background:#fff; }
+    </style>
 </head>
 <body>
 <div class="sidebar">
@@ -12,7 +21,7 @@
     <a href="{{ url_for('employees') }}">Employees</a>
     <a href="{{ url_for('attendance') }}">Attendance</a>
     <a href="{{ url_for('calendar_view') }}">Calendar</a>
-<a href="{{ url_for('admin_leave_requests') }}">Leave Requests</a>
+    <a href="{{ url_for('admin_leave_requests') }}">Leave Requests</a>
     <a href="{{ url_for('payroll') }}">Payroll</a>
     <a href="{{ url_for('loans') }}">Loan Management</a>
     <a href="{{ url_for('loan_report') }}">Loan Report</a>
@@ -29,34 +38,68 @@
     {% with messages = get_flashed_messages(with_categories=true) %}
         {% for category, message in messages %}<div class="alert {{ category }}">{{ message }}</div>{% endfor %}
     {% endwith %}
-    <form method="POST" action="{{ url_for('delete_selected_payroll') }}" onsubmit="return confirmBulkDelete();">
-    <div class="card table-container">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:12px;flex-wrap:wrap;">
+
+    <div class="card" style="margin-bottom:12px;">
+        <div class="email-toolbar">
             <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
-                <input type="checkbox" id="select_all_payroll" onchange="toggleAllPayroll(this)">
-                <b>Select All</b>
+                <input type="checkbox" id="select_all_filtered" onchange="toggleFiltered(this)">
+                <b>Select All Filtered</b>
             </label>
-            <button type="submit" class="btn danger" id="delete_selected_btn" disabled>Delete Selected</button>
+            <button type="button" class="btn primary" id="send_selected_btn" disabled onclick="sendSelected()">Send Payslip</button>
+            <button type="button" class="btn" id="delete_selected_btn" disabled onclick="deleteSelected()">Delete</button>
+            <button type="button" class="btn primary" id="mark_paid_selected_btn" disabled onclick="markSelectedPaid()">Mark as Paid</button>
+            <span id="selected_count" style="font-size:13px;color:#666;"></span>
         </div>
-        <table>
+        <div style="font-size:12px;color:#777;margin-top:8px;">Select all currently filtered/visible payroll records, then choose the action. Send only emails Not Yet Sent; Mark as Paid only affects Approved payrolls.</div>
+    </div>
+
+    <form method="POST" action="{{ url_for('send_selected_payslips_email') }}" id="bulkEmailForm"><div id="bulkHiddenInputs"></div></form>
+    <form method="POST" action="{{ url_for('delete_selected_payroll') }}" id="bulkDeleteForm"><div id="bulkDeleteHiddenInputs"></div></form>
+    <form method="POST" action="{{ url_for('mark_selected_payrolls_paid') }}" id="bulkPaidForm"><div id="bulkPaidHiddenInputs"></div></form>
+
+    <div class="card table-container">
+        <table id="payrollTable">
             <thead>
-                <tr><th><span class="sr-only">Select</span></th><th>Employee</th><th>Period</th><th>Gross</th><th>Deductions</th><th>Net</th><th>Status</th><th>Action</th></tr>
+                <tr><th>Select</th><th>Paid</th><th>Email</th><th>Employee</th><th>Period</th><th>Gross</th><th>Deductions</th><th>Net</th><th>Payroll Status</th><th>Email Status</th><th>Action</th></tr>
                 <tr class="filter-row">
                     <th></th>
-                    <th><input class="col-filter" data-col="1" placeholder="Filter employee"></th>
-                    <th><input class="col-filter" data-col="2" placeholder="Filter period"></th>
-                    <th><input class="col-filter" data-col="3" placeholder="Filter gross"></th>
-                    <th><input class="col-filter" data-col="4" placeholder="Filter deductions"></th>
-                    <th><input class="col-filter" data-col="5" placeholder="Filter net"></th>
-                    <th><input class="col-filter" data-col="6" placeholder="Filter status"></th>
-                    <th><input class="col-filter" data-col="7" placeholder="Filter action"></th>
+                    <th></th>
+                    <th></th>
+                    <th><input class="col-filter" data-col="3" placeholder="Filter employee"></th>
+                    <th><input class="col-filter" data-col="4" placeholder="Filter period"></th>
+                    <th><input class="col-filter" data-col="5" placeholder="Filter gross"></th>
+                    <th><input class="col-filter" data-col="6" placeholder="Filter deductions"></th>
+                    <th><input class="col-filter" data-col="7" placeholder="Filter net"></th>
+                    <th>
+                        <select class="col-filter" data-col="8">
+                            <option value="">All Status</option>
+                            <option value="Draft">Draft</option>
+                            <option value="Approved">Approved</option>
+                            <option value="Paid">Paid</option>
+                        </select>
+                    </th>
+                    <th>
+                        <select class="col-filter" data-col="9">
+                            <option value="">All Email Status</option>
+                            <option value="Not Yet Sent">Not Yet Sent</option>
+                            <option value="Sent">Sent</option>
+                        </select>
+                    </th>
+                    <th><input class="col-filter" data-col="10" placeholder="Filter action"></th>
                 </tr>
-                </thead>
+            </thead>
             <tbody>
             {% for p in payroll_records %}
+                {% set email_status = p.email_status or 'Not Yet Sent' %}
                 <tr>
                     <td>
-                        <input type="checkbox" name="payroll_ids" value="{{ p.id }}" class="payroll-check" onchange="updateDeleteButton()" aria-label="Select payroll for {{ p.employee.first_name }} {{ p.employee.last_name }}">
+                        <input type="checkbox" class="bulk-check" value="{{ p.id }}" onchange="updateSelection()" aria-label="Select payroll">
+                    </td>
+                    <td>
+                        {% if p.status == 'Approved' %}<span class="badge">Approved</span>{% elif p.status == 'Paid' %}<span class="badge">Paid</span>{% else %}<span style="color:#999;">—</span>{% endif %}
+                    </td>
+                    <td>
+                        {% if email_status == 'Sent' %}<span class="email-status email-sent">Sent</span>{% else %}<span class="email-status email-pending">Not Yet Sent</span>{% endif %}
                     </td>
                     <td>{{ p.employee.first_name }} {{ p.employee.last_name }}<br><small>{{ p.employee.employee_id }}</small></td>
                     <td>{{ p.period_start.strftime('%b %d, %Y') }} – {{ p.period_end.strftime('%b %d, %Y') }}</td>
@@ -65,51 +108,112 @@
                     <td><b>₱{{ "{:,.2f}".format(p.net_pay or 0) }}</b></td>
                     <td><span class="badge">{{ p.status }}</span></td>
                     <td>
+                        {% if email_status == 'Sent' %}
+                            <span class="email-status email-sent">Sent</span>
+                            {% if p.email_sent_at %}<div style="font-size:11px;color:#666;">{{ p.email_sent_at.strftime('%b %d, %Y %I:%M %p') }}</div>{% endif %}
+                        {% else %}
+                            <span class="email-status email-pending">Not Yet Sent</span>
+                            {% if p.email_error %}<div class="email-error">{{ p.email_error }}</div>{% endif %}
+                        {% endif %}
+                    </td>
+                    <td>
                         <a class="btn small" href="{{ url_for('view_payroll', id=p.id) }}">View</a>
                         <a class="btn small" href="{{ url_for('admin_payslip', id=p.id) }}">Payslip</a>
+                        {% if email_status != 'Sent' %}
+                        <form method="POST" action="{{ url_for('send_payslip_email_route', id=p.id) }}" style="display:inline;" onsubmit="return confirm('Send this payslip to the employee email?');">
+                            <button type="submit" class="btn small">Send Email</button>
+                        </form>
+                        {% endif %}
+                        <form method="POST" action="{{ url_for('delete_payroll', id=p.id) }}" style="display:inline;" onsubmit="return confirm('Delete this payroll record? This can reverse linked loan payments and remove its linked contribution record.');">
+                            <button type="submit" class="btn small" style="background:#a61b1b;color:#fff;">Delete</button>
+                        </form>
                     </td>
                 </tr>
             {% else %}
-                <tr><td colspan="8">No payroll records yet.</td></tr>
+                <tr><td colspan="11">No payroll records yet.</td></tr>
             {% endfor %}
             </tbody>
         </table>
     </div>
-    </form>
 </div>
 <script>
-function getPayrollChecks() {
-    return Array.from(document.querySelectorAll('.payroll-check'));
+function getBulkChecks() {
+    return Array.from(document.querySelectorAll('.bulk-check'));
 }
-function updateDeleteButton() {
-    const checks = getPayrollChecks();
-    const selected = checks.some(c => c.checked);
-    document.getElementById('delete_selected_btn').disabled = !selected;
-    const all = document.getElementById('select_all_payroll');
-    all.checked = checks.length > 0 && checks.every(c => c.checked);
-    all.indeterminate = checks.some(c => c.checked) && !all.checked;
+function getVisibleBulkChecks() {
+    return getBulkChecks().filter(c => {
+        const row = c.closest('tr');
+        return row && row.style.display !== 'none';
+    });
 }
-function toggleAllPayroll(source) {
-    getPayrollChecks().forEach(c => c.checked = source.checked);
-    updateDeleteButton();
+function updateSelection() {
+    const allChecks = getBulkChecks();
+    const selected = allChecks.filter(c => c.checked);
+    const visible = getVisibleBulkChecks();
+    document.getElementById('selected_count').textContent = selected.length ? `${selected.length} selected` : '';
+    document.getElementById('send_selected_btn').disabled = selected.length === 0;
+    document.getElementById('delete_selected_btn').disabled = selected.length === 0;
+    document.getElementById('mark_paid_selected_btn').disabled = selected.length === 0;
+    const all = document.getElementById('select_all_filtered');
+    all.checked = visible.length > 0 && visible.every(c => c.checked);
+    all.indeterminate = visible.some(c => c.checked) && !all.checked;
 }
-function confirmBulkDelete() {
-    const count = getPayrollChecks().filter(c => c.checked).length;
-    if (!count) return false;
-    return confirm(`Delete ${count} selected payroll record(s)? This will permanently remove the selected payroll records, including Paid payrolls and their linked contribution/loan-payment records.`);
+function toggleFiltered(source) {
+    getVisibleBulkChecks().forEach(c => c.checked = source.checked);
+    updateSelection();
+}
+function selectedIds() {
+    return getBulkChecks().filter(c => c.checked).map(c => c.value);
+}
+function submitIds(formId, containerId, ids) {
+    const form = document.getElementById(formId);
+    const container = document.getElementById(containerId);
+    container.innerHTML = '';
+    ids.forEach(id => {
+        const input = document.createElement('input');
+        input.type = 'hidden'; input.name = 'payroll_ids'; input.value = id;
+        container.appendChild(input);
+    });
+    form.submit();
+}
+function sendSelected() {
+    const ids = selectedIds();
+    if (!ids.length) return;
+    if (confirm(`Send payslips for ${ids.length} selected payroll record(s)? Already Sent emails will be skipped.`)) {
+        submitIds('bulkEmailForm','bulkHiddenInputs',ids);
+    }
+}
+function deleteSelected() {
+    const ids = selectedIds();
+    if (!ids.length) return;
+    if (confirm(`Delete ${ids.length} selected payroll record(s)? This can reverse linked loan payments and remove linked contribution records.`)) {
+        submitIds('bulkDeleteForm','bulkDeleteHiddenInputs',ids);
+    }
+}
+function markSelectedPaid() {
+    const ids = selectedIds();
+    if (!ids.length) return;
+    if (confirm(`Mark ${ids.length} selected payroll record(s) as Paid? Only Approved payrolls will be changed.`)) {
+        submitIds('bulkPaidForm','bulkPaidHiddenInputs',ids);
+    }
 }
 function applyPayrollColumnFilters() {
     const filters = Array.from(document.querySelectorAll('.col-filter')).map(input => ({
         col: Number(input.dataset.col), value: input.value.trim().toLowerCase()
     })).filter(f => f.value);
-    document.querySelectorAll('table tbody tr').forEach(row => {
+    document.querySelectorAll('#payrollTable tbody tr').forEach(row => {
         const cells = row.children;
         if (!cells.length || row.querySelector('td[colspan]')) return;
         const visible = filters.every(f => (cells[f.col]?.innerText || '').toLowerCase().includes(f.value));
         row.style.display = visible ? '' : 'none';
     });
+    updateSelection();
 }
-document.querySelectorAll('.col-filter').forEach(input => input.addEventListener('input', applyPayrollColumnFilters));
+document.querySelectorAll('.col-filter').forEach(input => {
+    input.addEventListener('input', applyPayrollColumnFilters);
+    input.addEventListener('change', applyPayrollColumnFilters);
+});
+applyPayrollColumnFilters();
 </script>
 </body>
 </html>

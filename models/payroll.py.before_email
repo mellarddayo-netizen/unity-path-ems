@@ -83,9 +83,4 @@ class Payroll(db.Model):
     status = db.Column(db.String(30), default="Draft")
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    # Payslip email delivery tracking
-    email_status = db.Column(db.String(30), default="Not Yet Sent")
-    email_sent_at = db.Column(db.DateTime)
-    email_error = db.Column(db.Text)
-
     employee = db.relationship("Employee", back_populates="payrolls")

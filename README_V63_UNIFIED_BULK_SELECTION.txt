@@ -1,0 +1,1 @@
+V63: Unified payroll bulk selection. One Select All Filtered checkbox selects only currently visible/filtered rows. Three actions: Send Payslip, Delete, Mark as Paid. Send skips Sent records; Mark as Paid changes only Approved records. Per-row Delete and Send Email remain available.

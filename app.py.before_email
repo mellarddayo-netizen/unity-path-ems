@@ -2,8 +2,6 @@ import calendar
 import math
 import os
 import json
-import smtplib
-from email.message import EmailMessage
 from io import BytesIO
 from zipfile import ZipFile, ZIP_DEFLATED
 from datetime import datetime, date, time, timedelta
@@ -22,14 +20,6 @@ from docx.shared import Inches, Pt
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.utils import get_column_letter
-from reportlab.lib.pagesizes import A4
-from reportlab.lib import colors
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.units import mm
-from reportlab.pdfbase import pdfmetrics
-from reportlab.pdfbase.ttfonts import TTFont
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
-from dotenv import load_dotenv
 
 from extensions import db
 
@@ -44,13 +34,8 @@ UNPAID_LUNCH_END = time(13, 0)
 MAX_REGULAR_PAID_HOURS = 8.0
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
-load_dotenv(os.path.join(BASE_DIR, ".env"))
 DB_PATH = os.path.join(BASE_DIR, "employee_system_v10.db")
-DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
-if DATABASE_URL.startswith("postgres://"):
-    DATABASE_URL = "postgresql://" + DATABASE_URL[len("postgres://"):]
-PROFILE_STORAGE_DIR = os.getenv("PROFILE_STORAGE_DIR", "").strip()
-PROFILE_DIR = PROFILE_STORAGE_DIR or os.path.join(BASE_DIR, "static", "uploads", "profiles")
+PROFILE_DIR = os.path.join(BASE_DIR, "static", "uploads", "profiles")
 
 ALLOWED_IMAGE_EXTENSIONS = {"jpg", "jpeg", "png", "webp"}
 
@@ -62,7 +47,7 @@ REQUIRED_WORK_HOURS = 8.0
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = "change-this-secret-key"
-app.config["SQLALCHEMY_DATABASE_URI"] = DATABASE_URL or ("sqlite:///" + DB_PATH)
+app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///" + DB_PATH
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024
 
@@ -2835,371 +2820,9 @@ def loan_report():
 
 
 
-# Unicode font for PDF payslips. Helvetica does not contain the Philippine peso sign (₱),
-# which can render as a black square in generated PDF attachments.
-PAYSLIP_FONT_PATH = os.path.join(BASE_DIR, "static", "fonts", "DejaVuSans.ttf")
-PAYSLIP_FONT_BOLD_PATH = os.path.join(BASE_DIR, "static", "fonts", "DejaVuSans-Bold.ttf")
-if os.path.exists(PAYSLIP_FONT_PATH):
-    try:
-        pdfmetrics.registerFont(TTFont("PayslipSans", PAYSLIP_FONT_PATH))
-        if os.path.exists(PAYSLIP_FONT_BOLD_PATH):
-            pdfmetrics.registerFont(TTFont("PayslipSans-Bold", PAYSLIP_FONT_BOLD_PATH))
-    except Exception:
-        pass
-
-PDF_FONT = "PayslipSans" if "PayslipSans" in pdfmetrics.getRegisteredFontNames() else "Helvetica"
-PDF_FONT_BOLD = "PayslipSans-Bold" if "PayslipSans-Bold" in pdfmetrics.getRegisteredFontNames() else "Helvetica-Bold"
-
-def _money(value):
-    return f"₱{float(value or 0):,.2f}"
-
-
-def build_payslip_pdf(payroll):
-    """Build the emailed PDF in the same visual style as the on-screen payslip.
-
-    The email attachment intentionally mirrors templates/payslip.html: A4 portrait,
-    compact two-column payroll tables, company logo, signature block, and the
-    diagonal SYSTEM GENERATED watermark.
-    """
-    buffer = BytesIO()
-
-    def draw_watermark(canvas, doc):
-        canvas.saveState()
-        canvas.setFillColor(colors.Color(31/255, 68/255, 120/255, alpha=0.10))
-        canvas.setFont(PDF_FONT_BOLD, 52)
-        canvas.translate(A4[0] / 2, A4[1] / 2)
-        canvas.rotate(38)
-        canvas.drawCentredString(0, 0, "SYSTEM GENERATED")
-        canvas.restoreState()
-
-    doc = SimpleDocTemplate(
-        buffer,
-        pagesize=A4,
-        rightMargin=14*mm,
-        leftMargin=14*mm,
-        topMargin=12*mm,
-        bottomMargin=12*mm,
-        title=f"Payslip - {payroll.employee.employee_id}",
-        author="UNITY PATH RECOVERY AND COLLECTION SERVICES OPC",
-    )
-
-    styles = getSampleStyleSheet()
-    styles.add(ParagraphStyle(
-        name="SlipTiny", parent=styles["Normal"], fontName=PDF_FONT,
-        fontSize=7.4, leading=9.2, textColor=colors.HexColor("#111111")
-    ))
-    styles.add(ParagraphStyle(
-        name="SlipSmall", parent=styles["Normal"], fontName=PDF_FONT,
-        fontSize=8.2, leading=10.0, textColor=colors.HexColor("#111111")
-    ))
-    styles.add(ParagraphStyle(
-        name="SlipSmallBold", parent=styles["Normal"], fontName=PDF_FONT_BOLD,
-        fontSize=8.2, leading=10.0, textColor=colors.HexColor("#111111")
-    ))
-    styles.add(ParagraphStyle(
-        name="SlipTitle", parent=styles["Normal"], fontName=PDF_FONT_BOLD,
-        fontSize=16, leading=18, alignment=1, textColor=colors.HexColor("#111111")
-    ))
-    styles.add(ParagraphStyle(
-        name="SlipPeriod", parent=styles["Normal"], fontName=PDF_FONT,
-        fontSize=8.2, leading=10, alignment=1, textColor=colors.HexColor("#111111")
-    ))
-    styles.add(ParagraphStyle(
-        name="SlipCenter", parent=styles["Normal"], fontName=PDF_FONT,
-        fontSize=8, leading=10, alignment=1, textColor=colors.HexColor("#111111")
-    ))
-
-    story = []
-    emp = payroll.employee
-    # Use a Windows-compatible date format for the payslip header.
-    period = f"{payroll.period_start.strftime('%B %d').replace(' 0', ' ')}-{payroll.period_end.strftime('%d').lstrip('0')}, {payroll.period_end.strftime('%Y')}"
-
-    logo_path = os.path.join(BASE_DIR, "static", "logo.png")
-    if os.path.exists(logo_path):
-        from reportlab.platypus import Image
-        logo = Image(logo_path, width=36*mm, height=12*mm, kind="proportional")
-    else:
-        logo = Paragraph("", styles["SlipSmall"])
-
-    header = Table([
-        [logo, Paragraph("<b>PAYSLIP</b><br/><font size='8'>Payslip For the period<br/><b>" + period + "</b></font>", styles["SlipTitle"])]
-    ], colWidths=[45*mm, 135*mm])
-    header.setStyle(TableStyle([
-        ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
-        ("LINEBELOW", (0,0), (-1,-1), 1.2, colors.HexColor("#1f4478")),
-        ("BOTTOMPADDING", (0,0), (-1,-1), 5),
-        ("LEFTPADDING", (0,0), (-1,-1), 0),
-        ("RIGHTPADDING", (0,0), (-1,-1), 0),
-        ("TOPPADDING", (0,0), (-1,-1), 0),
-    ]))
-    story += [header, Spacer(1, 2.5*mm)]
-
-    name = f"{emp.last_name}, {emp.first_name}{(' ' + emp.middle_name) if emp.middle_name else ''}"
-    meta_data = [
-        [Paragraph("Name", styles["SlipTiny"]), ":", Paragraph(f"<b>{name}</b>", styles["SlipSmall"])],
-        [Paragraph("Position", styles["SlipTiny"]), ":", Paragraph(emp.position or "—", styles["SlipTiny"])],
-        [Paragraph("Branch/Dept", styles["SlipTiny"]), ":", Paragraph(emp.department or "—", styles["SlipTiny"])],
-        [Paragraph("Employee ID", styles["SlipTiny"]), ":", Paragraph(emp.employee_id or "—", styles["SlipTiny"])],
-    ]
-    meta = Table(meta_data, colWidths=[25*mm, 5*mm, 70*mm], hAlign="LEFT")
-    meta.setStyle(TableStyle([
-        ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
-        ("LEFTPADDING", (0,0), (-1,-1), 0),
-        ("RIGHTPADDING", (0,0), (-1,-1), 0),
-        ("TOPPADDING", (0,0), (-1,-1), 0.5),
-        ("BOTTOMPADDING", (0,0), (-1,-1), 0.5),
-    ]))
-    story += [meta, Spacer(1, 3*mm)]
-
-    def money(value):
-        return f"₱{float(value or 0):,.2f}"
-
-    left_rows = [
-        ["BASIC PAY", "Amount"],
-        [f"Worked Days  <font size='6.5'>{payroll.worked_days or 0} day{'s' if (payroll.worked_days or 0) != 1 else ''}</font>", money((payroll.basic_pay or 0) - (payroll.vl_pay or 0) - (payroll.sl_pay or 0))],
-        [f"VL with Pay  <font size='6.5'>{payroll.vl_days or 0} day{'s' if (payroll.vl_days or 0) != 1 else ''}</font>", money(payroll.vl_pay)],
-        [f"SL with Pay  <font size='6.5'>{payroll.sl_days or 0} day{'s' if (payroll.sl_days or 0) != 1 else ''}</font>", money(payroll.sl_pay)],
-        ["Adjustment Basic", money(payroll.adjustment_addition)],
-        ["TOTAL BASIC", money((payroll.basic_pay or 0) + (payroll.adjustment_addition or 0))],
-    ]
-    allowance_total = (payroll.allowance or 0) + (payroll.incentive or 0) + (payroll.vl_conversion or 0) + (payroll.sl_conversion or 0)
-    left_rows += [
-        ["ALLOWANCES", "Amount"],
-        ["Perfect Attendance", "—"],
-        ["Transportation", money(payroll.allowance)],
-        ["Meal Allowance", "—"],
-        ["Birthday Bonus", "—"],
-        ["Load Allowance", "—"],
-        ["Lifestyle", "—"],
-        ["Housing", "—"],
-        ["Utility", "—"],
-        ["Airfare", "—"],
-        ["Other / Incentive", money(payroll.incentive)],
-        ["VL Cash Conversion", money(payroll.vl_conversion)],
-        ["SL Cash Conversion", money(payroll.sl_conversion)],
-        ["TOTAL ALLOWANCE / OTHER EARNINGS", money(allowance_total)],
-    ]
-
-    premium_total = (payroll.holiday_pay or 0) + (payroll.rest_day_premium or 0) + (payroll.overtime_pay or 0)
-    right_rows = [
-        ["PREMIUMS & OVERTIME", "Amount"],
-        ["Sunday Rest Day Premium", money(payroll.rest_day_premium)],
-        ["Holiday Pay / Premium", money(payroll.holiday_pay)],
-        [f"Regular OT  <font size='6.5'>{float(payroll.regular_ot_hours or 0):.2f} hrs</font>", money(payroll.regular_ot_pay)],
-        [f"Holiday OT  <font size='6.5'>{float(payroll.holiday_ot_hours or 0):.2f} hrs</font>", money(payroll.holiday_ot_pay)],
-        [f"Rest Day OT  <font size='6.5'>{float(payroll.rest_day_ot_hours or 0):.2f} hrs</font>", money(payroll.rest_day_ot_pay)],
-        ["Adjustment OT", "—"],
-        ["TOTAL PREMIUMS & OVERTIME", money(premium_total)],
-        ["DEDUCTIONS", "Amount"],
-        ["SSS Contribution", money(payroll.sss)],
-        ["PhilHealth Contribution", money(payroll.philhealth)],
-        ["HDMF Contribution", money(payroll.pagibig)],
-        ["SSS Salary Loan", money(payroll.loan_sss_salary)],
-        ["SSS Calamity Loan", money(payroll.loan_sss_calamity)],
-        ["Pag-IBIG MPL", money(payroll.loan_pagibig_mpl)],
-        ["Pag-IBIG Calamity Loan", money(payroll.loan_pagibig_calamity)],
-        ["Tardy / Late Deduction", money(payroll.late_deduction)],
-        ["Undertime Deduction", money(payroll.undertime_deduction)],
-        ["Withholding Tax", money(payroll.withholding_tax)],
-        ["Adjustment Deduction", money(payroll.adjustment_deduction)],
-        ["Other Deduction", money(payroll.other_deduction)],
-        ["TOTAL DEDUCTIONS", money(payroll.total_deductions)],
-    ]
-
-    def make_slip_table(rows):
-        data = []
-        for i, row in enumerate(rows):
-            if i == 0 or row[0].startswith("TOTAL") or row[0] in ("ALLOWANCES", "DEDUCTIONS") or row[0] == "PREMIUMS & OVERTIME":
-                a, b = Paragraph(f"<b>{row[0]}</b>", styles["SlipSmall"]), Paragraph(f"<b>{row[1]}</b>", styles["SlipSmall"])
-            else:
-                a, b = Paragraph(str(row[0]), styles["SlipTiny"]), Paragraph(str(row[1]), styles["SlipTiny"])
-            data.append([a, b])
-        t = Table(data, colWidths=[58*mm, 29*mm])
-        ts = [
-            ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
-            ("ALIGN", (1,0), (1,-1), "RIGHT"),
-            ("LEFTPADDING", (0,0), (-1,-1), 1),
-            ("RIGHTPADDING", (0,0), (-1,-1), 1),
-            ("TOPPADDING", (0,0), (-1,-1), 1.2),
-            ("BOTTOMPADDING", (0,0), (-1,-1), 1.2),
-            ("LINEBELOW", (0,0), (-1,0), 1.0, colors.HexColor("#111111")),
-        ]
-        for i, row in enumerate(rows):
-            if row[0] in ("ALLOWANCES", "DEDUCTIONS") or row[0] == "PREMIUMS & OVERTIME":
-                ts += [("LINEBELOW", (0,i), (-1,i), 1.0, colors.HexColor("#111111"))]
-            if str(row[0]).startswith("TOTAL"):
-                ts += [("LINEABOVE", (0,i), (-1,i), 1.0, colors.HexColor("#111111"))]
-                ts += [("FONTNAME", (0,i), (-1,i), "Helvetica-Bold")]
-        t.setStyle(TableStyle(ts))
-        return t
-
-    columns = Table([[make_slip_table(left_rows), make_slip_table(right_rows)]], colWidths=[89*mm, 89*mm])
-    columns.setStyle(TableStyle([
-        ("VALIGN", (0,0), (-1,-1), "TOP"),
-        ("LEFTPADDING", (0,0), (-1,-1), 0),
-        ("RIGHTPADDING", (0,0), (-1,-1), 3),
-        ("TOPPADDING", (0,0), (-1,-1), 0),
-        ("BOTTOMPADDING", (0,0), (-1,-1), 0),
-    ]))
-    story += [columns, Spacer(1, 3*mm)]
-
-    summary = Table([
-        [Paragraph("GROSS PAY", styles["SlipSmall"]), Paragraph(f"<b>{money(payroll.gross_pay)}</b>", styles["SlipSmallBold"]),
-         Paragraph("NET PAY", styles["SlipSmall"]), Paragraph(f"<b>{money(payroll.net_pay)}</b>", styles["SlipSmallBold"])]
-    ], colWidths=[29*mm, 61*mm, 29*mm, 61*mm])
-    summary.setStyle(TableStyle([
-        ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
-        ("ALIGN", (1,0), (1,0), "RIGHT"),
-        ("ALIGN", (3,0), (3,0), "RIGHT"),
-        ("LINEABOVE", (0,0), (1,0), 1.2, colors.HexColor("#111111")),
-        ("LINEBELOW", (0,0), (1,0), 1.2, colors.HexColor("#111111")),
-        ("BOX", (2,0), (3,0), 1.2, colors.HexColor("#111111")),
-        ("TOPPADDING", (0,0), (-1,-1), 5),
-        ("BOTTOMPADDING", (0,0), (-1,-1), 5),
-        ("LEFTPADDING", (0,0), (-1,-1), 2),
-        ("RIGHTPADDING", (0,0), (-1,-1), 2),
-    ]))
-    story += [summary, Spacer(1, 6*mm)]
-
-    status_line = payroll.status or "Draft"
-    if payroll.pay_date:
-        status_line += f" · Paid {payroll.pay_date.strftime('%B %d, %Y')}"
-    ack = [
-        Paragraph("I hereby acknowledge the receipt of the above amount:", styles["SlipCenter"]),
-        Spacer(1, 9*mm),
-        Paragraph(f"<b>{name}</b>", styles["SlipCenter"]),
-        Paragraph("________________________________________", styles["SlipCenter"]),
-        Paragraph(status_line, styles["SlipCenter"]),
-    ]
-    story += ack
-
-    doc.build(story, onFirstPage=draw_watermark, onLaterPages=draw_watermark)
-    buffer.seek(0)
-    return buffer.getvalue()
-
-
-def get_employee_email(employee):
-    return (employee.company_email or employee.email or "").strip()
-
-
-def send_payslip_email(payroll):
-    recipient = get_employee_email(payroll.employee)
-    if not recipient:
-        raise ValueError("Employee has no Company Email or Personal Email.")
-
-    host = os.getenv("MAIL_SERVER", "smtp.gmail.com")
-    port = int(os.getenv("MAIL_PORT", "587"))
-    username = os.getenv("MAIL_USERNAME", "").strip()
-    password = os.getenv("MAIL_PASSWORD", "")
-    sender = os.getenv("MAIL_FROM", username).strip()
-    sender_name = os.getenv("MAIL_FROM_NAME", "UNITY PATH RECOVERY AND COLLECTION SERVICES OPC").strip()
-    if not username or not password or not sender:
-        raise ValueError("Email is not configured. Set MAIL_USERNAME, MAIL_PASSWORD and MAIL_FROM in .env.")
-
-    period = f"{payroll.period_start.strftime('%B %d, %Y')} - {payroll.period_end.strftime('%B %d, %Y')}"
-    employee_name = f"{payroll.employee.first_name} {payroll.employee.last_name}".strip()
-    msg = EmailMessage()
-    msg["Subject"] = f"Payslip – {period}"
-    msg["From"] = f"{sender_name} <{sender}>"
-    msg["To"] = recipient
-    msg.set_content(
-        f"Dear {employee_name},\n\n"
-        f"Please find attached your payslip for the payroll period {period}.\n\n"
-        f"Regards,\n{sender_name}\nHuman Resources"
-    )
-    pdf = build_payslip_pdf(payroll)
-    safe_id = secure_filename(payroll.employee.employee_id or str(payroll.employee.id))
-    filename = f"Payslip_{safe_id}_{payroll.period_start.isoformat()}_to_{payroll.period_end.isoformat()}.pdf"
-    msg.add_attachment(pdf, maintype="application", subtype="pdf", filename=filename)
-
-    if port == 465:
-        with smtplib.SMTP_SSL(host, port, timeout=30) as smtp:
-            smtp.login(username, password)
-            smtp.send_message(msg)
-    else:
-        with smtplib.SMTP(host, port, timeout=30) as smtp:
-            smtp.ehlo()
-            smtp.starttls()
-            smtp.ehlo()
-            smtp.login(username, password)
-            smtp.send_message(msg)
-
-
-def migrate_v59_email_columns():
-    """Add email delivery tracking fields to existing SQLite payrolls."""
-    from sqlalchemy import text
-    with db.engine.begin() as conn:
-        existing = _table_columns("payrolls")
-        columns = {
-            "email_status": "VARCHAR(30) DEFAULT 'Not Yet Sent'",
-            "email_sent_at": "DATETIME",
-            "email_error": "TEXT",
-        }
-        for column, definition in columns.items():
-            if column not in existing:
-                conn.execute(text(f"ALTER TABLE payrolls ADD COLUMN {column} {definition}"))
-
-
 @app.route("/payroll")
 @admin_required
 def payroll():
-    payroll_records = Payroll.query.order_by(
-        Payroll.period_end.desc(),
-        Payroll.id.desc()
-    ).all()
-    return render_template("payroll.html", payroll_records=payroll_records)
-
-
-@app.route("/payroll/<int:id>/send-email", methods=["POST"])
-@admin_required
-def send_payslip_email_route(id):
-    payroll = Payroll.query.get_or_404(id)
-    try:
-        send_payslip_email(payroll)
-        payroll.email_status = "Sent"
-        payroll.email_sent_at = datetime.utcnow()
-        payroll.email_error = None
-        db.session.commit()
-        flash(f"Payslip sent to {get_employee_email(payroll.employee)}.", "success")
-    except Exception as exc:
-        payroll.email_status = "Not Yet Sent"
-        payroll.email_error = str(exc)[:1000]
-        db.session.commit()
-        flash(f"Payslip email failed: {exc}", "danger")
-    return redirect(url_for("payroll"))
-
-
-@app.route("/payroll/send-email-selected", methods=["POST"])
-@admin_required
-def send_selected_payslips_email():
-    ids = request.form.getlist("payroll_ids")
-    sent = 0
-    failed = 0
-    for raw_id in ids:
-        try:
-            payroll = Payroll.query.get(int(raw_id))
-        except (TypeError, ValueError):
-            payroll = None
-        if payroll is None or payroll.email_status == "Sent":
-            continue
-        try:
-            send_payslip_email(payroll)
-            payroll.email_status = "Sent"
-            payroll.email_sent_at = datetime.utcnow()
-            payroll.email_error = None
-            sent += 1
-        except Exception as exc:
-            payroll.email_status = "Not Yet Sent"
-            payroll.email_error = str(exc)[:1000]
-            failed += 1
-    db.session.commit()
-    if sent or failed:
-        flash(f"Payslip email result: {sent} sent, {failed} failed.", "success" if not failed else "warning")
-    else:
-        flash("No Not Yet Sent payslips were selected.", "warning")
-    return redirect(url_for("payroll"))
-
-
     payroll_records = Payroll.query.order_by(
         Payroll.period_end.desc(),
         Payroll.id.desc()
@@ -3522,74 +3145,6 @@ def mark_payroll_paid(id):
 
     return redirect(url_for("view_payroll", id=id))
 
-
-
-@app.route("/payroll/paid-selected", methods=["POST"])
-@admin_required
-def mark_selected_payrolls_paid():
-    """Mark selected Approved payroll records as Paid in one action.
-
-    Draft payrolls are not changed. For each Approved payroll, loan payments
-    are allocated once and the linked monthly contribution is finalized for
-    second-cutoff payrolls, matching the single-payroll Paid workflow.
-    """
-    selected_ids = request.form.getlist("payroll_ids")
-    if not selected_ids:
-        flash("Please select at least one Approved payroll to mark as Paid.", "warning")
-        return redirect(url_for("payroll"))
-
-    paid_count = 0
-    skipped = 0
-    invalid_ids = 0
-
-    for raw_id in selected_ids:
-        try:
-            payroll_id = int(raw_id)
-        except (TypeError, ValueError):
-            invalid_ids += 1
-            continue
-
-        payroll = db.session.get(Payroll, payroll_id)
-        if payroll is None:
-            invalid_ids += 1
-            continue
-
-        if payroll.status != "Approved":
-            skipped += 1
-            continue
-
-        if LoanPayment.query.filter_by(payroll_id=payroll.id).count() == 0:
-            allocate_loan_payment(payroll)
-
-        if is_second_cutoff(payroll.period_start, payroll.period_end):
-            settings = PayrollSettings.query.first()
-            upsert_monthly_contribution(
-                payroll.employee,
-                payroll.period_end,
-                settings,
-                payroll_id=payroll.id,
-                collected={
-                    "sss": payroll.sss,
-                    "philhealth": payroll.philhealth,
-                    "pagibig": payroll.pagibig,
-                }
-            )
-
-        payroll.status = "Paid"
-        paid_count += 1
-
-    db.session.commit()
-
-    parts = []
-    if paid_count:
-        parts.append(f"{paid_count} payroll record(s) marked as Paid.")
-    if skipped:
-        parts.append(f"{skipped} selected record(s) were skipped because they were not Approved.")
-    if invalid_ids:
-        parts.append(f"{invalid_ids} invalid/missing selection(s) were ignored.")
-
-    flash(" ".join(parts), "success" if paid_count else "warning")
-    return redirect(url_for("payroll"))
 
 
 @app.route("/payroll/delete-selected", methods=["POST"])
@@ -4013,14 +3568,6 @@ def employee_payslip(id):
     return render_template("payslip.html", payroll=payroll)
 
 
-def _table_columns(table_name):
-    """Return column names for a table using SQLAlchemy inspection (SQLite/PostgreSQL)."""
-    inspector = db.inspect(db.engine)
-    if table_name not in inspector.get_table_names():
-        return set()
-    return {col["name"] for col in inspector.get_columns(table_name)}
-
-
 def migrate_v12_columns():
     """Add V12 columns to an existing V10/V11 SQLite database without losing data."""
     from sqlalchemy import text
@@ -4040,7 +3587,9 @@ def migrate_v12_columns():
         }
 
         for table, columns in tables.items():
-            existing = _table_columns(table)
+            existing = {
+                row[1] for row in conn.execute(text(f"PRAGMA table_info({table})"))
+            }
             for column, definition in columns:
                 if column not in existing:
                     conn.execute(
@@ -4063,7 +3612,7 @@ def migrate_v15_columns():
             ("loan_pagibig_mpl", "FLOAT DEFAULT 0"),
             ("loan_pagibig_calamity", "FLOAT DEFAULT 0"),
         ]
-        existing = _table_columns("payrolls")
+        existing = {row[1] for row in conn.execute(text("PRAGMA table_info(payrolls)"))}
         for col, definition in columns:
             if col not in existing:
                 conn.execute(text(f"ALTER TABLE payrolls ADD COLUMN {col} {definition}"))
@@ -4072,7 +3621,7 @@ def migrate_v16_attendance_columns():
     """Add V16 approved OT field to existing attendance tables."""
     from sqlalchemy import text
     with db.engine.begin() as conn:
-        existing = _table_columns("attendances")
+        existing = {row[1] for row in conn.execute(text("PRAGMA table_info(attendances)"))}
         if "approved_overtime_hours" not in existing:
             conn.execute(text(
                 "ALTER TABLE attendances ADD COLUMN approved_overtime_hours FLOAT DEFAULT 0"
@@ -4083,7 +3632,7 @@ def migrate_v19_payroll_columns():
     """Add V19 payroll attendance deduction field to existing payrolls."""
     from sqlalchemy import text
     with db.engine.begin() as conn:
-        existing = _table_columns("payrolls")
+        existing = {row[1] for row in conn.execute(text("PRAGMA table_info(payrolls)"))}
         if "late_deduction" not in existing:
             conn.execute(text(
                 "ALTER TABLE payrolls ADD COLUMN late_deduction FLOAT DEFAULT 0"
@@ -4100,7 +3649,7 @@ def migrate_v28_contribution_columns():
             ("philhealth_basic_salary", "FLOAT DEFAULT 0"),
             ("pagibig_monthly_compensation", "FLOAT DEFAULT 0"),
         ]
-        existing = _table_columns("monthly_contributions")
+        existing = {row[1] for row in conn.execute(text("PRAGMA table_info(monthly_contributions)"))}
         for col, definition in columns:
             if col not in existing:
                 conn.execute(text(f"ALTER TABLE monthly_contributions ADD COLUMN {col} {definition}"))
@@ -4135,7 +3684,7 @@ def migrate_v46_leave_columns():
     inspector = db.inspect(db.engine)
     with db.engine.begin() as conn:
         if "employees" in inspector.get_table_names():
-            cols = _table_columns("employees")
+            cols = {c[1] for c in conn.execute(db.text("PRAGMA table_info(employees)"))}
             additions = {
                 "regularization_date": "DATE",
                 "vl_entitlement": "FLOAT DEFAULT 0",
@@ -4145,7 +3694,7 @@ def migrate_v46_leave_columns():
                 if name not in cols:
                     conn.execute(db.text(f"ALTER TABLE employees ADD COLUMN {name} {ddl}"))
         if "payrolls" in inspector.get_table_names():
-            cols = _table_columns("payrolls")
+            cols = {c[1] for c in conn.execute(db.text("PRAGMA table_info(payrolls)"))}
             additions = {
                 "vl_days": "INTEGER DEFAULT 0", "sl_days": "INTEGER DEFAULT 0",
                 "vl_pay": "FLOAT DEFAULT 0", "sl_pay": "FLOAT DEFAULT 0",
@@ -4198,7 +3747,7 @@ def migrate_v53_employee_profile_columns():
         "duties": "TEXT",
     }
     with db.engine.begin() as conn:
-        cols = _table_columns("employees")
+        cols = {c[1] for c in conn.execute(db.text("PRAGMA table_info(employees)"))}
         for name, ddl in additions.items():
             if name not in cols:
                 conn.execute(db.text(f"ALTER TABLE employees ADD COLUMN {name} {ddl}"))
@@ -4257,7 +3806,6 @@ def initialize_database():
         migrate_v19_payroll_columns()
         migrate_v12_columns()
         migrate_v28_contribution_columns()
-        migrate_v59_email_columns()
         normalize_attendance_statuses()
         seed_2026_holidays()
 
