@@ -1228,6 +1228,46 @@ def logout():
     return redirect(url_for("login"))
 
 
+@app.route("/account", methods=["GET", "POST"])
+def account():
+    """View the current account and securely change its password."""
+    if not session.get("user_id"):
+        return redirect(url_for("login"))
+
+    user = User.query.get_or_404(session["user_id"])
+
+    if request.method == "POST":
+        current_password = request.form.get("current_password", "")
+        new_password = request.form.get("new_password", "")
+        confirm_password = request.form.get("confirm_password", "")
+
+        if not user.check_password(current_password):
+            flash("Current password is incorrect.", "danger")
+            return render_template("account.html", user=user)
+
+        if len(new_password) < 8:
+            flash("New password must be at least 8 characters.", "danger")
+            return render_template("account.html", user=user)
+
+        if new_password != confirm_password:
+            flash("New password and confirmation do not match.", "danger")
+            return render_template("account.html", user=user)
+
+        if new_password == current_password:
+            flash("New password must be different from the current password.", "danger")
+            return render_template("account.html", user=user)
+
+        user.set_password(new_password)
+        db.session.commit()
+
+        # Force a fresh login after a password change.
+        session.clear()
+        flash("Password changed successfully. Please log in again.", "success")
+        return redirect(url_for("login"))
+
+    return render_template("account.html", user=user)
+
+
 @app.route("/dashboard")
 @admin_required
 def dashboard():
