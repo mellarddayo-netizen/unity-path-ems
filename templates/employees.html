@@ -41,7 +41,7 @@
         {% endfor %}
     {% endwith %}
 
-    <form id="employee-export-form" method="POST" action="{{ url_for('export_employees_docx') }}">
+    <form id="employee-export-form" method="POST" action="{{ url_for('export_employees_docx') }}"></form>
     <div class="table-container">
         <table>
             <thead>
@@ -61,7 +61,7 @@
             <tbody>
             {% for employee in employees %}
                 <tr>
-                    <td><input type="checkbox" class="employee-select" name="selected_employee_ids" value="{{ employee.id }}"></td>
+                    <td><input type="checkbox" class="employee-select" name="selected_employee_ids" value="{{ employee.id }}" form="employee-export-form"></td>
                     <td>
                         {% if employee.profile_photo %}
                             <img class="avatar small" src="{{ url_for('static', filename='uploads/profiles/' + employee.profile_photo) }}">
@@ -96,7 +96,6 @@
             </tbody>
         </table>
     </div>
-    </form>
 </div>
 <script>
 const selectAll = document.getElementById('select-all-employees');
