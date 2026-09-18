@@ -4,6 +4,16 @@
     <meta charset="UTF-8">
     <title>Employees</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+<style>
+  .account-link{cursor:pointer;text-decoration:none}
+  .completion-cell{min-width:145px}
+  .completion-bar{height:7px;background:#e5e7eb;border-radius:99px;overflow:hidden;margin-top:6px}
+  .completion-fill{height:100%;background:#17365d;border-radius:99px}
+  .completion-text{font-size:12px;font-weight:700}
+  .completion-text.success{color:#198754}.completion-text.warning{color:#b7791f}.completion-text.danger{color:#dc3545}
+  .status-badge{display:inline-block;padding:4px 8px;border-radius:999px;font-size:11px;font-weight:700}
+  .status-badge.success{background:#dff5e7;color:#198754}.status-badge.warning{background:#fff3cd;color:#946200}.status-badge.danger{background:#f8d7da;color:#b02a37}
+</style>
 </head>
 <body>
 <div class="sidebar">
@@ -55,6 +65,7 @@
                     <th>Basic Daily Rate</th>
                     <th>Status</th>
                     <th>Account</th>
+                    <th>Profile / Requirements</th>
                     <th>Action</th>
                 </tr>
             </thead>
@@ -77,10 +88,19 @@
                     <td><span class="badge">{{ employee.employment_status }}</span></td>
                     <td>
                         {% if employee.user_account %}
-                            <span class="badge success">Created</span>
+                            <a class="badge success account-link" href="{{ url_for('employee_account', id=employee.id) }}" title="Manage employee account">Created</a>
                         {% else %}
                             <a class="btn small" href="{{ url_for('create_employee_account', id=employee.id) }}">Create</a>
                         {% endif %}
+                    </td>
+                    {% set c = completion[employee.id] %}
+                    <td class="completion-cell">
+                        <a href="{{ url_for('employee_profile', id=employee.id) }}" style="text-decoration:none;color:inherit">
+                            <span class="status-badge {{ c.status_class }}">{{ c.status }}</span>
+                            <span class="completion-text {{ c.status_class }}" style="float:right">{{ c.percent }}%</span>
+                            <div class="completion-bar"><div class="completion-fill" style="width:{{ c.percent }}%"></div></div>
+                            <div style="font-size:11px;color:#6b7280;margin-top:4px">{{ c.missing_count }} missing</div>
+                        </a>
                     </td>
                     <td>
                         <a class="btn small" href="{{ url_for('employee_profile', id=employee.id) }}">View</a>
@@ -91,7 +111,7 @@
                     </td>
                 </tr>
             {% else %}
-                <tr><td colspan="9">No employees yet.</td></tr>
+                <tr><td colspan="10">No employees yet.</td></tr>
             {% endfor %}
             </tbody>
         </table>

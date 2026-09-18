@@ -4,6 +4,19 @@
     <meta charset="UTF-8">
     <title>Employee Profile</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+<style>
+  .completion-card{margin-bottom:20px}
+  .completion-head{display:flex;justify-content:space-between;gap:15px;align-items:center}
+  .completion-big{font-size:28px;font-weight:800;color:#17365d}
+  .completion-bar-lg{height:10px;background:#e5e7eb;border-radius:99px;overflow:hidden;margin:10px 0 16px}
+  .completion-bar-lg>div{height:100%;background:#17365d}
+  .missing-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+  .missing-list{margin:0;padding-left:20px}.missing-list li{margin:6px 0}
+  .missing-list .ok{color:#198754}
+  .mini-warning{background:#fff8e1;border:1px solid #f1df9a;border-radius:8px;padding:10px 12px;color:#7a5a00;font-size:13px}
+  .account-btn{margin-top:10px}
+  @media(max-width:800px){.missing-grid{grid-template-columns:1fr}}
+</style>
 </head>
 <body>
 <div class="sidebar">
@@ -35,7 +48,41 @@
             {% endif %}
             {% if not employee.user_account %}
                 <a class="btn primary" href="{{ url_for('create_employee_account', id=employee.id) }}">Create Account</a>
+            {% else %}
+                <a class="btn primary" href="{{ url_for('employee_account', id=employee.id) }}">Manage Account</a>
             {% endif %}
+        </div>
+    </div>
+
+    <div class="card completion-card">
+        <div class="completion-head">
+            <div>
+                <h2 style="margin:0">Profile & Requirements</h2>
+                <p style="margin:4px 0 0;color:#6b7280">Admin checklist for employee records and pre-employment requirements.</p>
+            </div>
+            <div style="text-align:right">
+                <div class="completion-big">{{ completion.percent }}%</div>
+                <span class="badge {{ 'success' if completion.status == 'Complete' else ('danger' if completion.status == 'Critical Missing' else '') }}">{{ completion.status }}</span>
+            </div>
+        </div>
+        <div class="completion-bar-lg"><div style="width:{{ completion.percent }}%"></div></div>
+        <div class="missing-grid">
+            <div>
+                <h3>Incomplete Details <span style="color:#6b7280;font-size:12px">({{ completion.missing_details|length }})</span></h3>
+                {% if completion.missing_details %}
+                    <ul class="missing-list">{% for item in completion.missing_details %}<li>❌ {{ item }}</li>{% endfor %}</ul>
+                {% else %}
+                    <div class="mini-warning" style="background:#eefaf2;border-color:#b7e4c7;color:#176b35">All required employee details are complete.</div>
+                {% endif %}
+            </div>
+            <div>
+                <h3>Missing Requirements <span style="color:#6b7280;font-size:12px">({{ completion.missing_documents|length }})</span></h3>
+                {% if completion.missing_documents %}
+                    <ul class="missing-list">{% for item in completion.missing_documents %}<li>❌ {{ item }}</li>{% endfor %}</ul>
+                {% else %}
+                    <div class="mini-warning" style="background:#eefaf2;border-color:#b7e4c7;color:#176b35">All required documents are marked submitted.</div>
+                {% endif %}
+            </div>
         </div>
     </div>
 

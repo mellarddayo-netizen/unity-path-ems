@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Employee Account</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+      .account-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+      .account-box{border:1px solid #dbe3ee;border-radius:10px;padding:20px;background:#fbfcfe}
+      .account-box h2{margin-top:0;color:#17365d}
+      .readonly{background:#eef3f8;border:1px solid #dbe3ee;border-radius:7px;padding:10px 12px;font-weight:700}
+      .warning-box{background:#fff8e1;border:1px solid #f1df9a;border-radius:8px;padding:12px;color:#7a5a00;margin-bottom:18px}
+      .completion-mini{font-size:24px;font-weight:800;color:#17365d}
+      @media(max-width:800px){.account-grid{grid-template-columns:1fr}}
+    </style>
+</head>
+<body>
+<div class="sidebar">
+    <div class="brand-logo"><img src="{{ url_for('static', filename='logo.png') }}" alt="UNITY PATH RECOVERY AND COLLECTION SERVICES OPC"></div>
+    <a href="{{ url_for('dashboard') }}">Dashboard</a>
+    <a href="{{ url_for('employees') }}">Employees</a>
+    <a href="{{ url_for('attendance') }}">Attendance</a>
+    <a href="{{ url_for('calendar_view') }}">Calendar</a>
+    <a href="{{ url_for('admin_leave_requests') }}">Leave Requests</a>
+    <a href="{{ url_for('payroll') }}">Payroll</a>
+    <a href="{{ url_for('loans') }}">Loan Management</a>
+    <a href="{{ url_for('loan_report') }}">Loan Report</a>
+    <a href="{{ url_for('payroll_settings') }}">Payroll Settings</a>
+    <a href="{{ url_for('payroll_contributions') }}">Contribution Shares</a>
+    <a href="{{ url_for('thirteenth_month_report') }}">13th Month</a>
+    <a href="{{ url_for('account') }}">My Account</a>
+    <a href="{{ url_for('logout') }}">Logout</a>
+</div>
+
+<div class="main">
+    <div class="page-header">
+        <div>
+            <h1>Employee Account</h1>
+            <p>{{ employee.first_name }} {{ employee.last_name }} · {{ employee.employee_id }}</p>
+        </div>
+        <div>
+            <a class="btn" href="{{ url_for('employee_profile', id=employee.id) }}">Back to Profile</a>
+            <a class="btn" href="{{ url_for('edit_employee', id=employee.id) }}">Edit Profile</a>
+        </div>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% for category, message in messages %}
+            <div class="alert {{ category }}">{{ message }}</div>
+        {% endfor %}
+    {% endwith %}
+
+    <div class="card" style="margin-bottom:20px">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:15px">
+            <div>
+                <h2 style="margin:0">Account Status</h2>
+                <p style="margin:5px 0 0;color:#6b7280">Admin can update the username or reset the password. Existing passwords are never displayed.</p>
+            </div>
+            <div style="text-align:right">
+                <div class="completion-mini">{{ completion.percent }}%</div>
+                <div style="font-size:12px;color:#6b7280">Profile completion</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="account-grid">
+        <div class="card account-box">
+            <h2>Username</h2>
+            <p>Current username:</p>
+            <div class="readonly">{{ user.username }}</div>
+
+            <form method="POST" style="margin-top:18px">
+                <input type="hidden" name="action" value="change_username">
+                <label>New Username</label>
+                <input name="username" value="{{ user.username }}" required autocomplete="off">
+                <div class="actions" style="margin-top:15px">
+                    <button class="btn primary" type="submit">Change Username</button>
+                </div>
+            </form>
+        </div>
+
+        <div class="card account-box">
+            <h2>Password</h2>
+            <div class="warning-box">
+                The current password cannot be viewed. Use this section to set a new password when the employee forgets it.
+            </div>
+            <form method="POST">
+                <input type="hidden" name="action" value="reset_password">
+                <label>New Password</label>
+                <input type="password" name="password" minlength="8" required autocomplete="new-password">
+                <label>Confirm New Password</label>
+                <input type="password" name="confirm_password" minlength="8" required autocomplete="new-password">
+                <div class="actions" style="margin-top:15px">
+                    <button class="btn primary" type="submit" onclick="return confirm('Reset this employee password?');">Reset Password</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="card" style="margin-top:20px">
+        <h2>Employee Login Information</h2>
+        <div class="form-grid">
+            <div><label>Employee ID</label><div class="readonly">{{ employee.employee_id }}</div></div>
+            <div><label>Username</label><div class="readonly">{{ user.username }}</div></div>
+            <div><label>Password</label><div class="readonly">Hidden for security</div></div>
+            <div><label>Role</label><div class="readonly">{{ user.role|capitalize }}</div></div>
+        </div>
+        <p style="margin-top:15px;color:#6b7280;font-size:13px">
+            Changing the Employee ID does not change this username or password. Employee records remain linked by the internal employee record ID.
+        </p>
+    </div>
+</div>
+</body>
+</html>

@@ -1298,11 +1298,102 @@ def dashboard():
     )
 
 
+
+REQUIRED_EMPLOYEE_FIELDS = [
+    ("Employee ID", "employee_id"),
+    ("First Name", "first_name"),
+    ("Last Name", "last_name"),
+    ("Department", "department"),
+    ("Position / Job Title", "position"),
+    ("Date Hired", "date_hired"),
+    ("Employment Type", "employment_type"),
+    ("Basic Daily Rate", "daily_rate"),
+    ("Date of Birth", "date_of_birth"),
+    ("Sex", "sex"),
+    ("Civil Status", "civil_status"),
+    ("Nationality", "nationality"),
+    ("Current Home Address", "address"),
+    ("Primary Mobile Number", "phone"),
+    ("Personal Email", "email"),
+    ("Emergency Contact Name", "emergency_name"),
+    ("Emergency Contact Relationship", "emergency_relationship"),
+    ("Emergency Contact Number", "emergency_phone"),
+    ("SSS Number", "sss_number"),
+    ("PhilHealth Number", "philhealth_number"),
+    ("Pag-IBIG / MID Number", "pagibig_number"),
+    ("TIN", "tin_number"),
+    ("Bank Name", "bank_name"),
+    ("Bank Account Name", "bank_account_name"),
+    ("Bank Account Number", "bank_account_number"),
+    ("2x2 Profile Photo", "profile_photo"),
+]
+
+REQUIRED_EMPLOYEE_DOCUMENTS = [
+    "Resume / Curriculum Vitae",
+    "Birth Certificate (PSA)",
+    "NBI Clearance",
+    "Police Clearance",
+    "Barangay Clearance",
+    "SSS ID / E-1 Form",
+    "PhilHealth MDR Form",
+    "Pag-IBIG MDF Form",
+    "TIN / BIR Form 1902",
+    "Valid Government ID",
+    "2x2 ID Photos",
+    "Medical Certificate",
+    "Drug Test Result",
+]
+
+
+def employee_completion(employee):
+    """Return a transparent profile/requirements checklist for the admin UI."""
+    missing_details = []
+    for label, attr in REQUIRED_EMPLOYEE_FIELDS:
+        value = getattr(employee, attr, None)
+        if value is None or (isinstance(value, str) and not value.strip()):
+            missing_details.append(label)
+
+    documents = _json_load(getattr(employee, "documents_json", None), [])
+    submitted = {
+        str(item.get("document", "")).strip()
+        for item in documents
+        if isinstance(item, dict) and str(item.get("submitted", "")).strip().lower() == "yes"
+    }
+    missing_documents = [
+        name for name in REQUIRED_EMPLOYEE_DOCUMENTS
+        if name not in submitted
+    ]
+
+    total = len(REQUIRED_EMPLOYEE_FIELDS) + len(REQUIRED_EMPLOYEE_DOCUMENTS)
+    completed = total - len(missing_details) - len(missing_documents)
+    percent = round((completed / total) * 100) if total else 100
+
+    if not missing_details and not missing_documents:
+        status = "Complete"
+        status_class = "success"
+    elif len(missing_details) + len(missing_documents) >= 8:
+        status = "Critical Missing"
+        status_class = "danger"
+    else:
+        status = "Incomplete"
+        status_class = "warning"
+
+    return {
+        "percent": percent,
+        "status": status,
+        "status_class": status_class,
+        "missing_details": missing_details,
+        "missing_documents": missing_documents,
+        "missing_count": len(missing_details) + len(missing_documents),
+    }
+
+
 @app.route("/employees")
 @admin_required
 def employees():
     records = Employee.query.order_by(Employee.last_name.asc()).all()
-    return render_template("employees.html", employees=records)
+    completion = {employee.id: employee_completion(employee) for employee in records}
+    return render_template("employees.html", employees=records, completion=completion)
 
 
 def build_employee_profile_docx(emp):
@@ -1626,7 +1717,8 @@ def employee_profile(id):
     return render_template(
         "employee_profile.html",
         employee=employee,
-        attendance=attendance
+        attendance=attendance,
+        completion=employee_completion(employee)
     )
 
 
@@ -1647,7 +1739,7 @@ def create_employee_account(id):
 
     if employee.user_account:
         flash("Employee account already exists.", "warning")
-        return redirect(url_for("employee_profile", id=id))
+        return redirect(url_for("employee_account", id=id))
 
     if request.method == "POST":
         username = request.form.get("username", "").strip()
@@ -1655,17 +1747,15 @@ def create_employee_account(id):
 
         if not username or not password:
             flash("Username and password are required.", "danger")
-            return render_template(
-                "create_employee_account.html",
-                employee=employee
-            )
+            return render_template("create_employee_account.html", employee=employee)
+
+        if len(password) < 8:
+            flash("Password must be at least 8 characters.", "danger")
+            return render_template("create_employee_account.html", employee=employee)
 
         if User.query.filter_by(username=username).first():
             flash("Username already exists.", "danger")
-            return render_template(
-                "create_employee_account.html",
-                employee=employee
-            )
+            return render_template("create_employee_account.html", employee=employee)
 
         user = User(
             username=username,
@@ -1678,11 +1768,59 @@ def create_employee_account(id):
         db.session.commit()
 
         flash("Employee account created.", "success")
-        return redirect(url_for("employee_profile", id=id))
+        return redirect(url_for("employee_account", id=id))
+
+    return render_template("create_employee_account.html", employee=employee)
+
+
+@app.route("/employees/<int:id>/account", methods=["GET", "POST"])
+@admin_required
+def employee_account(id):
+    """Admin-only account management. Existing passwords are never displayed."""
+    employee = Employee.query.get_or_404(id)
+    user = employee.user_account
+
+    if not user:
+        return redirect(url_for("create_employee_account", id=id))
+
+    if request.method == "POST":
+        action = request.form.get("action", "").strip()
+
+        if action == "change_username":
+            username = request.form.get("username", "").strip()
+            if not username:
+                flash("Username is required.", "danger")
+            else:
+                existing = User.query.filter(User.username == username, User.id != user.id).first()
+                if existing:
+                    flash("Username already exists.", "danger")
+                else:
+                    user.username = username
+                    db.session.commit()
+                    flash("Username updated successfully.", "success")
+            return redirect(url_for("employee_account", id=id))
+
+        if action == "reset_password":
+            password = request.form.get("password", "")
+            confirm = request.form.get("confirm_password", "")
+            if len(password) < 8:
+                flash("Password must be at least 8 characters.", "danger")
+            elif password != confirm:
+                flash("Password and confirmation do not match.", "danger")
+            else:
+                user.set_password(password)
+                db.session.commit()
+                flash("Password reset successfully. Give the new password to the employee securely.", "success")
+            return redirect(url_for("employee_account", id=id))
+
+        flash("Invalid account action.", "danger")
+        return redirect(url_for("employee_account", id=id))
 
     return render_template(
-        "create_employee_account.html",
-        employee=employee
+        "employee_account.html",
+        employee=employee,
+        user=user,
+        completion=employee_completion(employee)
     )
 
 
