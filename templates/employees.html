@@ -64,7 +64,7 @@
                     <td><input type="checkbox" class="employee-select" name="selected_employee_ids" value="{{ employee.id }}" form="employee-export-form"></td>
                     <td>
                         {% if employee.profile_photo %}
-                            <img class="avatar small" src="{{ url_for('static', filename='uploads/profiles/' + employee.profile_photo) }}">
+                            <img class="avatar small" src="{{ url_for('profile_photo', filename=employee.profile_photo) }}">
                         {% else %}
                             <div class="avatar small placeholder">—</div>
                         {% endif %}

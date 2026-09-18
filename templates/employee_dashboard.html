@@ -23,7 +23,7 @@
             <p>{{ employee.employee_id }}</p>
         </div>
         {% if employee.profile_photo %}
-            <img class="avatar" src="{{ url_for('static', filename='uploads/profiles/' + employee.profile_photo) }}">
+            <img class="avatar" src="{{ url_for('profile_photo', filename=employee.profile_photo) }}">
         {% endif %}
     </div>
 

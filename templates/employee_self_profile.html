@@ -26,7 +26,7 @@
 
     <div class="card profile-header">
         {% if employee.profile_photo %}
-            <img class="photo-2x2" src="{{ url_for('static', filename='uploads/profiles/' + employee.profile_photo) }}">
+            <img class="photo-2x2" src="{{ url_for('profile_photo', filename=employee.profile_photo) }}">
         {% else %}
             <div class="photo-2x2 placeholder">2x2</div>
         {% endif %}
