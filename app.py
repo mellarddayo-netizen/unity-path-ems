@@ -11,7 +11,7 @@ from functools import wraps
 
 from flask import (
     Flask, render_template, request, redirect, url_for,
-    session, flash, abort, send_file
+    session, flash, abort, send_file, send_from_directory
 )
 from werkzeug.utils import secure_filename
 from sqlalchemy import or_
@@ -70,6 +70,15 @@ db.init_app(app)
 app.jinja_env.globals["timedelta"] = timedelta
 
 os.makedirs(PROFILE_DIR, exist_ok=True)
+
+
+@app.route("/profile-photos/<path:filename>", endpoint="profile_photo")
+def profile_photo(filename):
+    """Serve employee profile photos from the persistent profile storage directory."""
+    safe_name = secure_filename(os.path.basename(filename))
+    if not safe_name:
+        abort(404)
+    return send_from_directory(PROFILE_DIR, safe_name)
 
 
 def admin_required(view):
