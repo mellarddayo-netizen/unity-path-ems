@@ -349,3 +349,14 @@ th { background: #f9fafb; }
     .payslip-page { background: white; padding: 0; }
     .payslip { box-shadow: none; }
 }
+
+/* V76 organized admin sidebar */
+.sidebar .side-link, .sidebar .side-group > summary { display:flex; align-items:center; width:100%; box-sizing:border-box; color:#fff; text-decoration:none; font-size:16px; line-height:1.25; padding:11px 12px; margin:2px 0; border-radius:7px; cursor:pointer; list-style:none; }
+.sidebar .side-group > summary::-webkit-details-marker { display:none; }
+.sidebar .side-group > summary::after { content:'›'; margin-left:auto; font-size:21px; line-height:1; transition:transform .15s ease; }
+.sidebar .side-group[open] > summary::after { transform:rotate(90deg); }
+.sidebar .side-link:hover, .sidebar .side-group > summary:hover { background:rgba(255,255,255,.08); }
+.sidebar .side-submenu { margin:0 0 7px 0; padding:2px 0 3px 13px; border-left:1px solid rgba(255,255,255,.18); }
+.sidebar .side-submenu a { display:block; color:rgba(255,255,255,.88); text-decoration:none; font-size:14px; line-height:1.25; padding:8px 10px; border-radius:6px; }
+.sidebar .side-submenu a:hover { background:rgba(255,255,255,.08); color:#fff; }
+.sidebar .side-group { margin:1px 0; }

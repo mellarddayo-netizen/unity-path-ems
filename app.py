@@ -1517,6 +1517,48 @@ def _money(value):
 
 
 
+def sync_payroll_salary_expenses(year=None, month=None):
+    """Create/update salary expense rows from approved/paid payrolls.
+    Draft payrolls are not treated as obligations. Approved = Pending, Paid = Paid.
+    Uses net pay because this tracker represents actual salary cash paid to employees;
+    statutory remittances are tracked separately.
+    """
+    query = Payroll.query.filter(Payroll.status.in_(["Approved", "Paid"]))
+    if year is not None and month is not None:
+        start = date(year, month, 1)
+        end = date(year + 1, 1, 1) if month == 12 else date(year, month + 1, 1)
+        query = query.filter(Payroll.period_end >= start, Payroll.period_end < end)
+    rows = query.all()
+    for payroll in rows:
+        period_key = f"{payroll.period_start.isoformat()}:{payroll.period_end.isoformat()}"
+        source_key = f"payroll_salary:{payroll.id}"
+        employee_name = payroll.employee.full_name if getattr(payroll.employee, "full_name", None) else f"{payroll.employee.first_name} {payroll.employee.last_name}".strip()
+        amount = round(float(payroll.net_pay or 0), 2)
+        if amount <= 0:
+            continue
+        status = "Paid" if payroll.status == "Paid" else "Pending"
+        expense = Expense.query.filter_by(source_type="payroll_salary", source_key=source_key).first()
+        remarks = f"Auto-generated from Payroll {period_key}. Employee: {employee_name}. Payroll status: {payroll.status}."
+        if not expense:
+            db.session.add(Expense(
+                expense_date=payroll.pay_date or payroll.period_end,
+                name=f"Salary - {employee_name} ({payroll.period_start:%b %d}–{payroll.period_end:%b %d, %Y})",
+                category="Salary / Payroll", amount=amount,
+                due_date=payroll.pay_date or payroll.period_end,
+                paid_date=(payroll.pay_date if payroll.status == "Paid" else None),
+                status=status, remarks=remarks, source_type="payroll_salary", source_key=source_key
+            ))
+        else:
+            # Preserve manually-set expense status only for safety; payroll is the source of truth.
+            expense.amount = amount
+            expense.name = f"Salary - {employee_name} ({payroll.period_start:%b %d}–{payroll.period_end:%b %d, %Y})"
+            expense.due_date = payroll.pay_date or payroll.period_end
+            expense.status = status
+            expense.paid_date = payroll.pay_date if payroll.status == "Paid" else None
+            expense.remarks = remarks
+    db.session.commit()
+
+
 @app.route("/expenses", methods=["GET", "POST"])
 @admin_required
 def expense_report():
@@ -1577,6 +1619,7 @@ def expense_report():
         return redirect(url_for("expense_report", year=year, month=month, view=request.form.get("view", "other")))
 
     sync_contribution_expenses(year, month)
+    sync_payroll_salary_expenses(year, month)
     start = date(year, month, 1)
     end = date(year + 1, 1, 1) if month == 12 else date(year, month + 1, 1)
     view = request.args.get("view", "other")
@@ -1631,6 +1674,13 @@ def sync_contribution_expenses(year, month):
     db.session.commit()
 
 
+def sync_contribution_expenses_all_months():
+    """Sync all payroll contribution periods into the expense checklist."""
+    periods = db.session.query(MonthlyContribution.contribution_year, MonthlyContribution.contribution_month).distinct().all()
+    for year, month in periods:
+        sync_contribution_expenses(year, month)
+
+
 @app.route("/financial-summary", methods=["GET", "POST"])
 @admin_required
 def financial_summary():
@@ -1654,15 +1704,45 @@ def financial_summary():
         except (KeyError, ValueError):
             flash("Please check the income details and amount.", "danger")
         return redirect(url_for("financial_summary", year=year, month=month))
+    sync_contribution_expenses(year, month)
+    sync_payroll_salary_expenses(year, month)
     incomes = FinancialIncome.query.filter(FinancialIncome.income_date >= start, FinancialIncome.income_date < end).order_by(FinancialIncome.income_date.desc(), FinancialIncome.id.desc()).all()
     expenses = Expense.query.filter(Expense.expense_date >= start, Expense.expense_date < end).all()
+    paid_rows = [e for e in expenses if e.status == "Paid"]
+    pending_rows = [e for e in expenses if e.status == "Pending"]
     income_total = round(sum(float(i.amount or 0) for i in incomes), 2)
-    paid_expenses = round(sum(float(e.amount or 0) for e in expenses if e.status == "Paid"), 2)
-    pending_expenses = round(sum(float(e.amount or 0) for e in expenses if e.status == "Pending"), 2)
+    paid_expenses = round(sum(float(e.amount or 0) for e in paid_rows), 2)
+    pending_expenses = round(sum(float(e.amount or 0) for e in pending_rows), 2)
     profit = round(income_total - paid_expenses, 2)
+
+    def cat_total(rows, category):
+        return round(sum(float(e.amount or 0) for e in rows if e.category == category), 2)
+    def gov_total(rows, label):
+        return round(sum(float(e.amount or 0) for e in rows if e.source_type == "payroll_contribution" and label.lower() in (e.name or "").lower()), 2)
+
+    paid_breakdown = {
+        "salary": cat_total(paid_rows, "Salary / Payroll"),
+        "sss": gov_total(paid_rows, "sss"),
+        "philhealth": gov_total(paid_rows, "philhealth"),
+        "pagibig": gov_total(paid_rows, "pag-ibig"),
+        "tax": cat_total(paid_rows, "Tax"),
+        "other": round(sum(float(e.amount or 0) for e in paid_rows if e.category not in {"Salary / Payroll", "Tax", "Government"} and e.source_type != "payroll_contribution"), 2),
+        "government_total": round(sum(float(e.amount or 0) for e in paid_rows if e.source_type == "payroll_contribution"), 2),
+    }
+    pending_breakdown = {
+        "salary": cat_total(pending_rows, "Salary / Payroll"),
+        "sss": gov_total(pending_rows, "sss"),
+        "philhealth": gov_total(pending_rows, "philhealth"),
+        "pagibig": gov_total(pending_rows, "pag-ibig"),
+        "tax": cat_total(pending_rows, "Tax"),
+        "other": round(sum(float(e.amount or 0) for e in pending_rows if e.category not in {"Salary / Payroll", "Tax", "Government"} and e.source_type != "payroll_contribution"), 2),
+        "government_total": round(sum(float(e.amount or 0) for e in pending_rows if e.source_type == "payroll_contribution"), 2),
+    }
+    commission_total = round(sum(float(r.commission or 0) for r in CommissionRecord.query.filter_by(period=f"{year}-{month:02d}").all()), 2)
     return render_template("financial_summary.html", year=year, month=month, incomes=incomes,
                            income_total=income_total, paid_expenses=paid_expenses, pending_expenses=pending_expenses,
-                           profit=profit)
+                           profit=profit, paid_breakdown=paid_breakdown, pending_breakdown=pending_breakdown,
+                           commission_total=commission_total)
 
 
 @app.route("/income/delete/<int:income_id>", methods=["POST"])
@@ -1869,13 +1949,21 @@ def dashboard():
         employment_status="Inactive"
     ).count()
     total_payroll = Payroll.query.count()
+    sync_contribution_expenses_all_months()
+    sync_payroll_salary_expenses()
+    income_total = round(sum(float(i.amount or 0) for i in FinancialIncome.query.all()), 2)
+    expenses = Expense.query.all()
+    paid_expenses = round(sum(float(e.amount or 0) for e in expenses if e.status == "Paid"), 2)
+    pending_expenses = round(sum(float(e.amount or 0) for e in expenses if e.status == "Pending"), 2)
+    profit = round(income_total - paid_expenses, 2)
+    commission_total = round(sum(float(r.commission or 0) for r in CommissionRecord.query.all()), 2)
+    paid_payroll = round(sum(float(p.net_pay or 0) for p in Payroll.query.filter_by(status="Paid").all()), 2)
 
     return render_template(
         "dashboard.html",
-        total_employees=total_employees,
-        active_employees=active_employees,
-        inactive_employees=inactive_employees,
-        total_payroll=total_payroll
+        total_employees=total_employees, active_employees=active_employees, inactive_employees=inactive_employees,
+        total_payroll=total_payroll, income_total=income_total, paid_expenses=paid_expenses,
+        pending_expenses=pending_expenses, profit=profit, commission_total=commission_total, paid_payroll=paid_payroll
     )
 
 
