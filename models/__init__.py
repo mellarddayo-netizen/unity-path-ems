@@ -12,3 +12,8 @@ from .holiday import Holiday
 from .leave_request import LeaveRequest
 
 from .device import Device
+
+from .commission import CommissionRecord
+
+from .expense import Expense
+from .income import FinancialIncome

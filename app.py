@@ -35,7 +35,7 @@ from dotenv import load_dotenv
 
 from extensions import db
 
-from models import Device, Employee, User, Attendance, Payroll, PayrollSettings, FinalPay, EmployeeLoan, LoanPayment, MonthlyContribution, Holiday, LeaveRequest
+from models import Device, Employee, User, Attendance, Payroll, PayrollSettings, FinalPay, EmployeeLoan, LoanPayment, MonthlyContribution, Holiday, LeaveRequest, CommissionRecord, Expense
 
 
 # Standard company attendance schedule
@@ -1495,6 +1495,367 @@ def admin_devices():
         employees=employees,
         current_device_id=get_device_id()
     )
+
+
+def _parse_commission_rate(value):
+    """Accept Excel values such as 10%, 0.10, or 10 and return decimal rate."""
+    if value is None or str(value).strip() == "":
+        raise ValueError("Commission Rate is required")
+    if isinstance(value, str):
+        raw = value.strip().replace(",", "")
+        if raw.endswith("%"):
+            return float(raw[:-1]) / 100.0
+        number = float(raw)
+    else:
+        number = float(value)
+    # Excel percentage cells normally arrive as 0.10; plain 10 means 10%.
+    return number / 100.0 if number > 1 else number
+
+
+def _money(value):
+    return round(float(value or 0), 2)
+
+
+
+@app.route("/expenses", methods=["GET", "POST"])
+@admin_required
+def expense_report():
+    """Separate expense trackers. Only Paid expenses flow into the financial summary."""
+    today = date.today()
+    try:
+        year = int(request.args.get("year", today.year))
+        month = int(request.args.get("month", today.month))
+    except (TypeError, ValueError):
+        year, month = today.year, today.month
+    month = month if 1 <= month <= 12 else today.month
+
+    if request.method == "POST":
+        action = request.form.get("action", "add")
+        if action == "sync_contributions":
+            sync_contribution_expenses(year, month)
+            flash("Mandatory contribution obligations synchronized from Payroll.", "success")
+            return redirect(url_for("expense_report", year=year, month=month, view="contributions"))
+        if action in {"mark_paid", "mark_pending"}:
+            expense = Expense.query.get_or_404(int(request.form["expense_id"]))
+            if expense.source_type == "payroll_contribution" and action == "mark_pending":
+                expense.status = "Pending"
+                expense.paid_date = None
+            elif action == "mark_paid":
+                expense.status = "Paid"
+                paid_raw = request.form.get("paid_date", "").strip()
+                expense.paid_date = datetime.strptime(paid_raw, "%Y-%m-%d").date() if paid_raw else today
+            else:
+                expense.status = "Pending"
+                expense.paid_date = None
+            db.session.commit()
+            flash("Expense status updated.", "success")
+            return redirect(url_for("expense_report", year=year, month=month, view=request.args.get("view", "other")))
+
+        try:
+            expense_date = datetime.strptime(request.form["expense_date"], "%Y-%m-%d").date()
+            amount = float(request.form["amount"])
+            if amount < 0:
+                raise ValueError
+            due_raw = request.form.get("due_date", "").strip()
+            due_date = datetime.strptime(due_raw, "%Y-%m-%d").date() if due_raw else None
+            category = request.form.get("category", "Other Expense").strip() or "Other Expense"
+            expense = Expense(
+                expense_date=expense_date,
+                name=request.form["name"].strip(),
+                category=category,
+                amount=amount,
+                due_date=due_date,
+                status=request.form.get("status", "Pending"),
+                remarks=request.form.get("remarks", "").strip(),
+                source_type="manual",
+            )
+            db.session.add(expense)
+            db.session.commit()
+            flash("Expense added.", "success")
+        except (KeyError, ValueError):
+            flash("Please check the expense details and amount.", "danger")
+        return redirect(url_for("expense_report", year=year, month=month, view=request.form.get("view", "other")))
+
+    sync_contribution_expenses(year, month)
+    start = date(year, month, 1)
+    end = date(year + 1, 1, 1) if month == 12 else date(year, month + 1, 1)
+    view = request.args.get("view", "other")
+    if view == "contributions":
+        expenses = Expense.query.filter(Expense.expense_date >= start, Expense.expense_date < end,
+                                        Expense.source_type == "payroll_contribution").order_by(Expense.due_date.asc().nullslast(), Expense.id.desc()).all()
+    elif view == "tax":
+        expenses = Expense.query.filter(Expense.expense_date >= start, Expense.expense_date < end,
+                                        Expense.category == "Tax").order_by(Expense.status.asc(), Expense.due_date.asc().nullslast(), Expense.id.desc()).all()
+    else:
+        expenses = Expense.query.filter(Expense.expense_date >= start, Expense.expense_date < end,
+                                        Expense.category.notin_(["Tax", "Government"]),
+                                        Expense.source_type != "payroll_contribution").order_by(Expense.status.asc(), Expense.due_date.asc().nullslast(), Expense.id.desc()).all()
+
+    all_expenses = Expense.query.filter(Expense.expense_date >= start, Expense.expense_date < end).all()
+    paid = round(sum(float(e.amount or 0) for e in all_expenses if e.status == "Paid"), 2)
+    pending = round(sum(float(e.amount or 0) for e in all_expenses if e.status == "Pending"), 2)
+    overdue = round(sum(float(e.amount or 0) for e in all_expenses if e.status == "Pending" and e.due_date and e.due_date < today), 2)
+    employee_remittance = round(sum((r.sss_collected or 0) + (r.philhealth_collected or 0) + (r.pagibig_collected or 0)
+                                    for r in MonthlyContribution.query.filter_by(contribution_year=year, contribution_month=month).all()), 2)
+    employer_cost = round(sum((r.sss_employer or 0) + (r.philhealth_employer or 0) + (r.pagibig_employer or 0)
+                              for r in MonthlyContribution.query.filter_by(contribution_year=year, contribution_month=month).all()), 2)
+    return render_template("expense_report.html", expenses=expenses, year=year, month=month, view=view,
+                           paid=paid, pending=pending, overdue=overdue,
+                           employee_remittance=employee_remittance, employer_cost=employer_cost, today=today)
+
+
+def sync_contribution_expenses(year, month):
+    """Create/update statutory remittance checklist rows from Payroll."""
+    rows = MonthlyContribution.query.filter_by(contribution_year=year, contribution_month=month).all()
+    if not rows:
+        return
+    period_key = f"{year}-{month:02d}"
+    specs = [("SSS", "sss"), ("PhilHealth", "philhealth"), ("Pag-IBIG", "pagibig")]
+    period_date = date(year, month, 1)
+    for label, field in specs:
+        employee_total = sum(float(getattr(r, f"{field}_collected") or 0) for r in rows)
+        employer_total = sum(float(getattr(r, f"{field}_employer") or 0) for r in rows)
+        amount = round(employee_total + employer_total, 2)
+        if amount <= 0:
+            continue
+        source_key = f"{period_key}:{field}"
+        expense = Expense.query.filter_by(source_type="payroll_contribution", source_key=source_key).first()
+        remarks = f"Auto-generated from Payroll. Employee share: ₱{employee_total:,.2f}; Company share: ₱{employer_total:,.2f}."
+        if not expense:
+            db.session.add(Expense(expense_date=period_date, name=f"{label} - {period_key}", category="Government",
+                                    amount=amount, status="Pending", source_type="payroll_contribution", source_key=source_key,
+                                    remarks=remarks))
+        elif expense.status != "Paid":
+            expense.amount = amount
+            expense.remarks = remarks
+    db.session.commit()
+
+
+@app.route("/financial-summary", methods=["GET", "POST"])
+@admin_required
+def financial_summary():
+    today = date.today()
+    try:
+        year = int(request.args.get("year", today.year)); month = int(request.args.get("month", today.month))
+    except (TypeError, ValueError):
+        year, month = today.year, today.month
+    if month < 1 or month > 12: month = today.month
+    start = date(year, month, 1)
+    end = date(year + 1, 1, 1) if month == 12 else date(year, month + 1, 1)
+    if request.method == "POST":
+        try:
+            income_date = datetime.strptime(request.form["income_date"], "%Y-%m-%d").date()
+            amount = float(request.form["amount"])
+            if amount < 0: raise ValueError
+            db.session.add(FinancialIncome(income_date=income_date, name=request.form["name"].strip(),
+                                           category=request.form.get("category", "Other Income").strip() or "Other Income",
+                                           amount=amount, remarks=request.form.get("remarks", "").strip()))
+            db.session.commit(); flash("Income recorded.", "success")
+        except (KeyError, ValueError):
+            flash("Please check the income details and amount.", "danger")
+        return redirect(url_for("financial_summary", year=year, month=month))
+    incomes = FinancialIncome.query.filter(FinancialIncome.income_date >= start, FinancialIncome.income_date < end).order_by(FinancialIncome.income_date.desc(), FinancialIncome.id.desc()).all()
+    expenses = Expense.query.filter(Expense.expense_date >= start, Expense.expense_date < end).all()
+    income_total = round(sum(float(i.amount or 0) for i in incomes), 2)
+    paid_expenses = round(sum(float(e.amount or 0) for e in expenses if e.status == "Paid"), 2)
+    pending_expenses = round(sum(float(e.amount or 0) for e in expenses if e.status == "Pending"), 2)
+    profit = round(income_total - paid_expenses, 2)
+    return render_template("financial_summary.html", year=year, month=month, incomes=incomes,
+                           income_total=income_total, paid_expenses=paid_expenses, pending_expenses=pending_expenses,
+                           profit=profit)
+
+
+@app.route("/income/delete/<int:income_id>", methods=["POST"])
+@admin_required
+def delete_income(income_id):
+    income = FinancialIncome.query.get_or_404(income_id)
+    year, month = income.income_date.year, income.income_date.month
+    db.session.delete(income); db.session.commit(); flash("Income deleted.", "success")
+    return redirect(url_for("financial_summary", year=year, month=month))
+
+@app.route("/commission-report", methods=["GET", "POST"])
+@admin_required
+def commission_report():
+    if request.method == "POST":
+        period = request.form.get("period", "").strip()
+        replace_existing = request.form.get("replace_existing") == "1"
+        upload = request.files.get("commission_file")
+        if not period:
+            flash("Please enter the commission period, e.g. September 2026.", "danger")
+            return redirect(url_for("commission_report"))
+        if not upload or not upload.filename.lower().endswith((".xlsx", ".xlsm")):
+            flash("Please upload an Excel file (.xlsx or .xlsm).", "danger")
+            return redirect(url_for("commission_report"))
+
+        try:
+            from openpyxl import load_workbook
+            upload.stream.seek(0)
+            wb = load_workbook(upload.stream, data_only=True, read_only=True)
+            ws = wb.active
+            rows = list(ws.iter_rows(values_only=True))
+            if not rows:
+                raise ValueError("The Excel file is empty.")
+            headers = [str(x).strip().lower() if x is not None else "" for x in rows[0]]
+            required = ["agent name", "employee id", "total collection", "commission rate", "commission"]
+            missing = [h for h in required if h not in headers]
+            if missing:
+                raise ValueError("Missing required column(s): " + ", ".join(missing))
+            idx = {h: headers.index(h) for h in required}
+            parsed = []
+            errors = []
+            for row_num, row in enumerate(rows[1:], start=2):
+                if not any(v is not None and str(v).strip() for v in row):
+                    continue
+                try:
+                    agent_name = str(row[idx["agent name"]] or "").strip()
+                    employee_id = str(row[idx["employee id"]] or "").strip()
+                    if not agent_name or not employee_id:
+                        raise ValueError("Agent Name and Employee ID are required")
+                    total = _money(row[idx["total collection"]])
+                    rate = _parse_commission_rate(row[idx["commission rate"]])
+                    commission = _money(row[idx["commission"]])
+                    expected = _money(total * rate)
+                    if abs(expected - commission) > 0.01:
+                        raise ValueError(f"Commission {commission:,.2f} does not match {total:,.2f} × {rate:.2%} = {expected:,.2f}")
+                    parsed.append((agent_name, employee_id, total, rate, commission))
+                except Exception as exc:
+                    errors.append(f"Row {row_num}: {exc}")
+            if errors:
+                raise ValueError("Upload rejected. " + " | ".join(errors[:10]) + (" | ..." if len(errors) > 10 else ""))
+            if not parsed:
+                raise ValueError("No commission records were found.")
+
+            if replace_existing:
+                CommissionRecord.query.filter_by(period=period).delete(synchronize_session=False)
+            for agent_name, employee_id, total, rate, commission in parsed:
+                db.session.add(CommissionRecord(
+                    period=period,
+                    agent_name=agent_name,
+                    employee_id=employee_id,
+                    total_collection=total,
+                    commission_rate=rate,
+                    commission=commission,
+                ))
+            db.session.commit()
+            flash(f"Imported {len(parsed)} commission record(s) for {period}.", "success")
+        except Exception as exc:
+            db.session.rollback()
+            flash(str(exc), "danger")
+        return redirect(url_for("commission_report", period=period))
+
+    period = request.args.get("period", "").strip()
+    periods = [r[0] for r in db.session.query(CommissionRecord.period).distinct().order_by(CommissionRecord.period.desc()).all()]
+    records = CommissionRecord.query.filter_by(period=period).order_by(CommissionRecord.agent_name.asc()).all() if period else []
+    total_collection = sum(r.total_collection for r in records)
+    total_commission = sum(r.commission for r in records)
+    return render_template(
+        "commission_report.html",
+        records=records,
+        periods=periods,
+        selected_period=period,
+        total_collection=total_collection,
+        total_commission=total_commission,
+    )
+
+
+@app.route("/commission-template")
+@admin_required
+def commission_template():
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Commission Upload"
+    headers = ["Agent Name", "Employee ID", "Total Collection", "Commission Rate", "Commission"]
+    ws.append(headers)
+    examples = [
+        ["Juan Dela Cruz", "EMP001", 500000, 0.10, 50000],
+        ["Maria Santos", "EMP002", 380000, 0.05, 19000],
+    ]
+    for row in examples:
+        ws.append(row)
+    for cell in ws[1]:
+        cell.font = Font(bold=True)
+    for cell in ws["D"][1:]:
+        cell.number_format = "0.00%"
+    for cell in ws["C"][1:]:
+        cell.number_format = '#,##0.00'
+    for cell in ws["E"][1:]:
+        cell.number_format = '#,##0.00'
+    widths = {"A": 24, "B": 16, "C": 20, "D": 18, "E": 18}
+    for col, width in widths.items():
+        ws.column_dimensions[col].width = width
+    ws.freeze_panes = "A2"
+    out = BytesIO()
+    wb.save(out)
+    out.seek(0)
+    return send_file(out, as_attachment=True, download_name="commission_upload_template.xlsx", mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
+@app.route("/commission-slip/<int:record_id>")
+@admin_required
+def commission_slip(record_id):
+    record = CommissionRecord.query.get_or_404(record_id)
+    out = BytesIO()
+    doc = SimpleDocTemplate(out, pagesize=A4, rightMargin=20*mm, leftMargin=20*mm, topMargin=20*mm, bottomMargin=20*mm)
+    styles = getSampleStyleSheet()
+    story = [
+        Paragraph("UNITY PATH RECOVERY AND COLLECTION SERVICES OPC", styles["Title"]),
+        Spacer(1, 6),
+        Paragraph("AGENT COMMISSION SLIP", styles["Heading2"]),
+        Spacer(1, 12),
+        Paragraph(f"<b>Commission Period:</b> {record.period}", styles["Normal"]),
+        Paragraph(f"<b>Agent Name:</b> {record.agent_name}", styles["Normal"]),
+        Paragraph(f"<b>Employee ID:</b> {record.employee_id}", styles["Normal"]),
+        Spacer(1, 14),
+    ]
+    data = [
+        ["Particular", "Amount"],
+        ["Total Collection", f"₱{record.total_collection:,.2f}"],
+        ["Commission Rate", f"{record.commission_rate:.2%}"],
+        ["Commission Earned", f"₱{record.commission:,.2f}"],
+    ]
+    table = Table(data, colWidths=[110*mm, 55*mm])
+    table.setStyle(TableStyle([
+        ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#17365D")),
+        ("TEXTCOLOR", (0,0), (-1,0), colors.white),
+        ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
+        ("GRID", (0,0), (-1,-1), 0.5, colors.grey),
+        ("ALIGN", (1,1), (1,-1), "RIGHT"),
+        ("FONTNAME", (0,-1), (-1,-1), "Helvetica-Bold"),
+        ("BACKGROUND", (0,-1), (-1,-1), colors.HexColor("#EAF2F8")),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 8),
+        ("TOPPADDING", (0,0), (-1,-1), 8),
+    ]))
+    story.append(table)
+    story.append(Spacer(1, 24))
+    story.append(Paragraph("This document is system-generated based on the uploaded commission report.", styles["Normal"]))
+    doc.build(story)
+    out.seek(0)
+    filename = secure_filename(f"commission_slip_{record.employee_id}_{record.period}.pdf")
+    return send_file(out, as_attachment=True, download_name=filename, mimetype="application/pdf")
+
+
+@app.route("/commission-slips/<period>")
+@admin_required
+def commission_slips(period):
+    records = CommissionRecord.query.filter_by(period=period).order_by(CommissionRecord.agent_name.asc()).all()
+    if not records:
+        flash("No commission records found for that period.", "danger")
+        return redirect(url_for("commission_report"))
+    bundle = BytesIO()
+    with ZipFile(bundle, "w", ZIP_DEFLATED) as zf:
+        for record in records:
+            out = BytesIO()
+            doc = SimpleDocTemplate(out, pagesize=A4, rightMargin=20*mm, leftMargin=20*mm, topMargin=20*mm, bottomMargin=20*mm)
+            styles = getSampleStyleSheet()
+            story = [Paragraph("UNITY PATH RECOVERY AND COLLECTION SERVICES OPC", styles["Title"]), Spacer(1, 6), Paragraph("AGENT COMMISSION SLIP", styles["Heading2"]), Spacer(1, 12), Paragraph(f"<b>Commission Period:</b> {record.period}", styles["Normal"]), Paragraph(f"<b>Agent Name:</b> {record.agent_name}", styles["Normal"]), Paragraph(f"<b>Employee ID:</b> {record.employee_id}", styles["Normal"]), Spacer(1, 14)]
+            data = [["Particular", "Amount"], ["Total Collection", f"₱{record.total_collection:,.2f}"], ["Commission Rate", f"{record.commission_rate:.2%}"], ["Commission Earned", f"₱{record.commission:,.2f}"]]
+            table = Table(data, colWidths=[110*mm, 55*mm])
+            table.setStyle(TableStyle([("BACKGROUND", (0,0), (-1,0), colors.HexColor("#17365D")), ("TEXTCOLOR", (0,0), (-1,0), colors.white), ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"), ("GRID", (0,0), (-1,-1), 0.5, colors.grey), ("ALIGN", (1,1), (1,-1), "RIGHT"), ("FONTNAME", (0,-1), (-1,-1), "Helvetica-Bold"), ("BACKGROUND", (0,-1), (-1,-1), colors.HexColor("#EAF2F8")), ("BOTTOMPADDING", (0,0), (-1,-1), 8), ("TOPPADDING", (0,0), (-1,-1), 8)]))
+            story.append(table); story.append(Spacer(1, 24)); story.append(Paragraph("This document is system-generated based on the uploaded commission report.", styles["Normal"]))
+            doc.build(story); out.seek(0)
+            zf.writestr(secure_filename(f"commission_slip_{record.employee_id}.pdf"), out.getvalue())
+    bundle.seek(0)
+    return send_file(bundle, as_attachment=True, download_name=secure_filename(f"commission_slips_{period}.zip"), mimetype="application/zip")
 
 
 @app.route("/dashboard")
