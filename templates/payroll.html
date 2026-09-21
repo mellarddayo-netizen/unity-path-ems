@@ -51,7 +51,7 @@
             <button type="button" class="btn primary" id="mark_paid_selected_btn" disabled onclick="markSelectedPaid()">Mark as Paid</button>
             <span id="selected_count" style="font-size:13px;color:#666;"></span>
         </div>
-        <div style="font-size:12px;color:#777;margin-top:8px;">Select all currently filtered/visible payroll records, then choose the action. Send only emails Not Yet Sent; Mark as Paid only affects Approved payrolls.</div>
+        <div style="font-size:12px;color:#777;margin-top:8px;">Select all currently filtered/visible payroll records, then choose the action. Generated payrolls are automatically Approved; review/edit or delete them before marking as Paid.</div>
     </div>
 
     <form method="POST" action="{{ url_for('send_selected_payslips_email') }}" id="bulkEmailForm"><div id="bulkHiddenInputs"></div></form>
@@ -74,8 +74,8 @@
                     <th>
                         <select class="col-filter" data-col="8">
                             <option value="">All Status</option>
-                            <option value="Draft">Draft</option>
                             <option value="Approved">Approved</option>
+                            <option value="Paid">Paid</option>
                             <option value="Paid">Paid</option>
                         </select>
                     </th>

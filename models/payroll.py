@@ -80,7 +80,7 @@ class Payroll(db.Model):
     total_deductions = db.Column(db.Float, default=0)
 
     net_pay = db.Column(db.Float, default=0)
-    status = db.Column(db.String(30), default="Draft")
+    status = db.Column(db.String(30), default="Approved")
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     # Payslip email delivery tracking

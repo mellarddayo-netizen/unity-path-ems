@@ -36,11 +36,7 @@
     <div class="card">
         <p><b>Period:</b> {{ payroll.period_start.strftime('%B %d, %Y') }} – {{ payroll.period_end.strftime('%B %d, %Y') }}</p>
         <p><b>Status:</b> <span class="badge">{{ payroll.status }}</span></p>
-        {% if payroll.status == "Draft" %}
-            <form method="POST" action="{{ url_for('approve_payroll', id=payroll.id) }}" class="inline">
-                <button class="btn primary" type="submit">Approve</button>
-            </form>
-        {% elif payroll.status == "Approved" %}
+        {% if payroll.status == "Approved" %}
             <form method="POST" action="{{ url_for('mark_payroll_paid', id=payroll.id) }}" class="inline">
                 <button class="btn primary" type="submit">Mark as Paid</button>
             </form>
