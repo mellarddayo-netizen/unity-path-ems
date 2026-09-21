@@ -3,6 +3,8 @@ import math
 import os
 import json
 import smtplib
+import uuid
+import hashlib
 from email.message import EmailMessage
 from io import BytesIO
 from zipfile import ZipFile, ZIP_DEFLATED
@@ -11,7 +13,7 @@ from functools import wraps
 
 from flask import (
     Flask, render_template, request, redirect, url_for,
-    session, flash, abort, send_file, send_from_directory
+    session, flash, abort, send_file, send_from_directory, g
 )
 from werkzeug.utils import secure_filename
 from sqlalchemy import or_
@@ -33,7 +35,7 @@ from dotenv import load_dotenv
 
 from extensions import db
 
-from models import Employee, User, Attendance, Payroll, PayrollSettings, FinalPay, EmployeeLoan, LoanPayment, MonthlyContribution, Holiday, LeaveRequest
+from models import Device, Employee, User, Attendance, Payroll, PayrollSettings, FinalPay, EmployeeLoan, LoanPayment, MonthlyContribution, Holiday, LeaveRequest
 
 
 # Standard company attendance schedule
@@ -70,6 +72,113 @@ db.init_app(app)
 app.jinja_env.globals["timedelta"] = timedelta
 
 os.makedirs(PROFILE_DIR, exist_ok=True)
+
+
+DEVICE_COOKIE_NAME = "unity_path_device"
+DEVICE_COOKIE_MAX_AGE = 60 * 60 * 24 * 365 * 2  # 2 years
+
+
+def _user_agent_hash():
+    return hashlib.sha256((request.headers.get("User-Agent", "") or "").encode("utf-8")).hexdigest()
+
+
+def get_device_id():
+    """Return the browser/device registration ID for this browser.
+
+    This is intentionally a web-device ID, not a MAC address. Browsers do not
+    expose the laptop's MAC address to normal web applications.
+    """
+    device_id = request.cookies.get(DEVICE_COOKIE_NAME)
+    if device_id:
+        return device_id
+    device_id = uuid.uuid4().hex.upper()
+    g.new_device_id = device_id
+    return device_id
+
+
+@app.after_request
+def persist_device_cookie(response):
+    device_id = getattr(g, "new_device_id", None)
+    if device_id:
+        response.set_cookie(
+            DEVICE_COOKIE_NAME,
+            device_id,
+            max_age=DEVICE_COOKIE_MAX_AGE,
+            httponly=True,
+            secure=not app.debug,
+            samesite="Lax",
+        )
+    return response
+
+
+def current_device():
+    device_id = get_device_id()
+    return Device.query.filter_by(device_id=device_id).first()
+
+
+def device_is_allowed(user=None):
+    """Allow access when this browser/device is on the company whitelist.
+
+    Device approval is intentionally NOT tied to an employee account. Any
+    valid EMS employee/admin account may use any Active company device.
+    """
+    device = current_device()
+    if not device or device.status != "Active":
+        return False
+    if device.user_agent_hash and device.user_agent_hash != _user_agent_hash():
+        return False
+    device.last_seen_at = datetime.utcnow()
+    return True
+
+
+def register_or_update_device(device_id, user=None, device_name=None, status="Active"):
+    """Create/update a company-whitelisted device.
+
+    The device is company-owned/authorized rather than employee-owned, so
+    employee_id is deliberately not assigned here.
+    """
+    device = Device.query.filter_by(device_id=device_id).first()
+    if not device:
+        device = Device(
+            device_id=device_id,
+            device_name=(device_name or "Company Device")[:120],
+            employee_id=None,
+            status=status,
+            user_agent_hash=_user_agent_hash(),
+            approved_at=datetime.utcnow() if status == "Active" else None,
+            last_seen_at=datetime.utcnow(),
+        )
+        db.session.add(device)
+    else:
+        if device_name:
+            device.device_name = device_name[:120]
+        device.status = status
+        device.user_agent_hash = _user_agent_hash()
+        device.approved_at = datetime.utcnow() if status == "Active" else device.approved_at
+        device.last_seen_at = datetime.utcnow()
+        device.employee_id = None
+    return device
+
+
+
+
+def create_pending_device_for_user(user=None):
+    """Create an unassigned pending company device for admin approval."""
+    device_id = get_device_id()
+    device = Device.query.filter_by(device_id=device_id).first()
+    if not device:
+        device = Device(
+            device_id=device_id,
+            device_name="Pending Company Device",
+            employee_id=None,
+            status="Pending",
+            user_agent_hash=_user_agent_hash(),
+            last_seen_at=datetime.utcnow(),
+        )
+        db.session.add(device)
+        db.session.commit()
+    return device
+
 
 
 @app.route("/profile-photos/<path:filename>", endpoint="profile_photo")
@@ -1211,24 +1320,87 @@ def save_profile_photo(employee, file):
 
 @app.route("/", methods=["GET", "POST"])
 def login():
+    device_id = get_device_id()
+
     if request.method == "POST":
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "")
 
         user = User.query.filter_by(username=username).first()
 
-        if user and user.check_password(password):
-            session.clear()
-            session["user_id"] = user.id
-            session["role"] = user.role
+        if not user or not user.check_password(password):
+            flash("Invalid username or password.", "danger")
+            return render_template("login.html", device_id=device_id)
 
-            if user.role == "admin":
-                return redirect(url_for("dashboard"))
-            return redirect(url_for("employee_dashboard"))
+        # Admin can bootstrap/register the first admin browser by logging in.
+        # All employee/admin accounts must use an approved company device.
+        if user.role == "admin":
+            if not device_is_allowed(user):
+                register_or_update_device(
+                    device_id,
+                    user=user,
+                    device_name="Admin Device",
+                    status="Active"
+                )
+                db.session.commit()
+                flash("This admin device has been registered successfully.", "success")
+        else:
+            if not device_is_allowed(user):
+                pending = create_pending_device_for_user(user)
+                flash(
+                    f"This device is not approved yet. Device ID: {pending.device_id}. "
+                    "Please give this ID to your Admin for approval.",
+                    "warning"
+                )
+                return render_template(
+                    "device_blocked.html",
+                    device=pending,
+                    employee=user.employee
+                )
 
-        flash("Invalid username or password.", "danger")
+        session.clear()
+        session["user_id"] = user.id
+        session["role"] = user.role
+        session["device_id"] = device_id
 
-    return render_template("login.html")
+        if user.role == "admin":
+            return redirect(url_for("dashboard"))
+        return redirect(url_for("employee_dashboard"))
+
+    return render_template("login.html", device_id=device_id)
+
+
+@app.route("/device-status")
+def device_status():
+    """Show the current browser's Device ID and registration status."""
+    device = current_device()
+    return render_template("device_status.html", device=device, device_id=get_device_id())
+
+
+@app.route("/device-register", methods=["GET", "POST"])
+def device_register():
+    """Admin-only bootstrap/registration helper for the current browser."""
+    device_id = get_device_id()
+    if request.method == "POST":
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "")
+        user = User.query.filter_by(username=username, role="admin").first()
+
+        if not user or not user.check_password(password):
+            flash("Invalid admin credentials.", "danger")
+            return render_template("device_register.html", device_id=device_id)
+
+        register_or_update_device(
+            device_id,
+            user=user,
+            device_name=request.form.get("device_name", "").strip() or "Admin Device",
+            status="Active"
+        )
+        db.session.commit()
+        flash("Device registered successfully. You may now log in.", "success")
+        return redirect(url_for("login"))
+
+    return render_template("device_register.html", device_id=device_id)
 
 
 @app.route("/logout")
@@ -1275,6 +1447,54 @@ def account():
         return redirect(url_for("login"))
 
     return render_template("account.html", user=user)
+
+
+@app.route("/admin/devices", methods=["GET", "POST"])
+@admin_required
+def admin_devices():
+    if request.method == "POST":
+        action = request.form.get("action", "").strip()
+        device_id = request.form.get("device_id", "").strip().upper()
+        device = Device.query.filter_by(device_id=device_id).first()
+
+        if action == "approve":
+            if not device:
+                flash("Device ID was not found. Ask the employee to open EMS and submit the displayed Device ID.", "danger")
+            else:
+                device.status = "Active"
+                device.device_name = request.form.get("device_name", "").strip() or device.device_name
+                # Company-device whitelist: never bind a device to one employee.
+                device.employee_id = None
+                device.approved_at = datetime.utcnow()
+                db.session.commit()
+                flash("Device approved.", "success")
+
+        elif action == "block":
+            if device:
+                device.status = "Blocked"
+                db.session.commit()
+                flash("Device blocked.", "success")
+            else:
+                flash("Device not found.", "danger")
+
+        elif action == "delete":
+            if device:
+                db.session.delete(device)
+                db.session.commit()
+                flash("Device registration deleted. The device will be treated as unregistered.", "success")
+            else:
+                flash("Device not found.", "danger")
+
+        return redirect(url_for("admin_devices"))
+
+    devices = Device.query.order_by(Device.status.asc(), Device.created_at.desc()).all()
+    employees = Employee.query.order_by(Employee.last_name.asc(), Employee.first_name.asc()).all()
+    return render_template(
+        "admin_devices.html",
+        devices=devices,
+        employees=employees,
+        current_device_id=get_device_id()
+    )
 
 
 @app.route("/dashboard")
@@ -4389,6 +4609,15 @@ def migrate_v53_employee_profile_columns():
         for name, ddl in additions.items():
             if name not in cols:
                 conn.execute(db.text(f"ALTER TABLE employees ADD COLUMN {name} {ddl}"))
+
+
+def migrate_v70_devices():
+    """Create the device access-control table for existing EMS databases."""
+    # db.create_all() creates the table for new deployments. For existing
+    # SQLite/PostgreSQL databases this helper is intentionally a no-op because
+    # the Device model has no changes to existing tables; db.create_all()
+    # above/below creates the new table when absent.
+    return None
 
 
 def migrate_v47_leave_requests():

@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Device Management</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        .device-id{font-family:monospace;font-size:12px;word-break:break-all}
+        .status-active{color:#15803d;font-weight:700}
+        .status-pending{color:#b45309;font-weight:700}
+        .status-blocked{color:#b91c1c;font-weight:700}
+        .device-card{margin-bottom:18px}
+        .device-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+        .device-actions form{margin:0}
+    </style>
+</head>
+<body>
+<div class="sidebar">
+    <div class="brand-logo"><img src="{{ url_for('static', filename='logo.png') }}" alt="UNITY PATH RECOVERY AND COLLECTION SERVICES OPC"></div>
+    <a href="{{ url_for('dashboard') }}">Dashboard</a>
+    <a href="{{ url_for('employees') }}">Employees</a>
+    <a href="{{ url_for('attendance') }}">Attendance</a>
+    <a href="{{ url_for('calendar_view') }}">Calendar</a>
+    <a href="{{ url_for('admin_leave_requests') }}">Leave Requests</a>
+    <a href="{{ url_for('payroll') }}">Payroll</a>
+    <a href="{{ url_for('loans') }}">Loan Management</a>
+    <a href="{{ url_for('loan_report') }}">Loan Report</a>
+    <a href="{{ url_for('payroll_settings') }}">Payroll Settings</a>
+    <a href="{{ url_for('payroll_contributions') }}">Contribution Shares</a>
+    <a href="{{ url_for('thirteenth_month_report') }}">13th Month</a>
+    <a href="{{ url_for('admin_devices') }}">Device Management</a>
+    <a href="{{ url_for('account') }}">My Account</a>
+    <a href="{{ url_for('logout') }}">Logout</a>
+</div>
+
+<div class="main">
+    <div class="page-header">
+        <div>
+            <h1>Device Management</h1>
+            <p>Only approved company devices can access EMS. Any authorized employee account can use an approved company device.</p>
+        </div>
+    </div>
+
+    <div class="card device-card">
+        <h2>This Admin Device</h2>
+        <p class="device-id">{{ current_device_id }}</p>
+        <small>Keep this Device ID if you need to identify this computer later.</small>
+    </div>
+
+    <div class="card device-card">
+        <h2>How to register a company laptop</h2>
+        <ol>
+            <li>Open EMS on the new company laptop.</li>
+            <li>Enter a valid EMS username and password.</li>
+            <li>If the device is new, EMS creates a <b>Pending</b> company device record.</li>
+            <li>Copy the displayed Device ID and give it to Admin.</li>
+            <li>Admin approves the device below. No employee assignment is required.</li>
+            <li>After approval, <b>any authorized employee</b> can use that company laptop.</li>
+        </ol>
+    </div>
+
+    <div class="card device-card">
+        <h2>Registered Devices</h2>
+        <div class="table-container">
+        <table>
+            <thead>
+            <tr>
+                <th>Device</th>
+                <th>Device ID</th>
+                <th>Status</th>
+                <th>Last Seen</th>
+                <th>Action</th>
+            </tr>
+            </thead>
+            <tbody>
+            {% for d in devices %}
+            <tr>
+                <td>{{ d.device_name or '—' }}</td>
+                <td class="device-id">{{ d.device_id }}</td>
+                <td class="status-{{ d.status|lower }}">{{ d.status }}</td>
+                <td>{{ d.last_seen_at.strftime('%Y-%m-%d %H:%M') if d.last_seen_at else '—' }}</td>
+                <td>
+                    {% if d.status != 'Active' %}
+                    <form method="POST" class="device-actions">
+                        <input type="hidden" name="action" value="approve">
+                        <input type="hidden" name="device_id" value="{{ d.device_id }}">
+                        <input type="text" name="device_name" value="{{ d.device_name or '' }}" placeholder="Device name">
+                        <button class="btn primary" type="submit">Approve</button>
+                    </form>
+                    {% else %}
+                    <form method="POST" class="device-actions">
+                        <input type="hidden" name="action" value="block">
+                        <input type="hidden" name="device_id" value="{{ d.device_id }}">
+                        <button class="btn" type="submit">Block</button>
+                    </form>
+                    {% endif %}
+                    <form method="POST" class="device-actions" onsubmit="return confirm('Delete this device registration?');">
+                        <input type="hidden" name="action" value="delete">
+                        <input type="hidden" name="device_id" value="{{ d.device_id }}">
+                        <button class="btn" type="submit">Delete</button>
+                    </form>
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="5">No registered devices yet.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        </div>
+    </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Device Not Approved</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body class="login-page">
+<div class="login-card">
+    <div class="login-brand"><img src="{{ url_for('static', filename='logo.png') }}" alt="UNITY PATH RECOVERY AND COLLECTION SERVICES OPC"></div>
+    <h1>Device Not Approved</h1>
+    <p class="login-subtitle">UNITY PATH RECOVERY AND COLLECTION SERVICES OPC</p>
+    <div class="alert warning">
+        This device is not yet authorized to access the EMS.
+    </div>
+    <div class="info-box">
+        <b>Device ID</b><br>
+        <code style="word-break:break-all;">{{ device.device_id }}</code>
+    </div>
+    <p>Please send this Device ID to your Admin. The Admin must approve this device before you can log in.</p>
+    <div class="actions">
+        <a class="btn" href="{{ url_for('login') }}">Back to Login</a>
+        <a class="btn" href="{{ url_for('device_status') }}">Check Device Status</a>
+    </div>
+</div>
+</body>
+</html>

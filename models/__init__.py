@@ -10,3 +10,5 @@ from .contribution import MonthlyContribution
 from .holiday import Holiday
 
 from .leave_request import LeaveRequest
+
+from .device import Device

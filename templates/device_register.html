@@ -2,13 +2,13 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>EMS Login</title>
+    <title>Register Device</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body class="login-page">
 <div class="login-card">
     <div class="login-brand"><img src="{{ url_for('static', filename='logo.png') }}" alt="UNITY PATH RECOVERY AND COLLECTION SERVICES OPC"></div>
-    <h1>Employee Management System</h1>
+    <h1>Register Admin Device</h1>
     <p class="login-subtitle">UNITY PATH RECOVERY AND COLLECTION SERVICES OPC</p>
 
     {% with messages = get_flashed_messages(with_categories=true) %}
@@ -17,23 +17,22 @@
         {% endfor %}
     {% endwith %}
 
-    <div class="info-box" style="margin-bottom:16px;">
-        <b>Device ID:</b> <code>{{ device_id }}</code><br>
-        <small>This browser/device must be registered before an employee account can access the EMS.</small>
+    <div class="info-box">
+        <b>Current Device ID:</b><br>
+        <code style="word-break:break-all;">{{ device_id }}</code>
+        <p style="margin-bottom:0;">Use this page only on a company-authorized admin computer.</p>
     </div>
 
     <form method="POST">
-        <label>Username</label>
+        <label>Admin Username</label>
         <input type="text" name="username" required>
-
-        <label>Password</label>
+        <label>Admin Password</label>
         <input type="password" name="password" required>
-
-        <button class="btn primary" type="submit">Login</button>
+        <label>Device Name</label>
+        <input type="text" name="device_name" value="Admin Device" required>
+        <button class="btn primary" type="submit">Register Device</button>
     </form>
-    <p style="text-align:center;margin-top:16px;">
-        <a href="{{ url_for('device_register') }}">Register this device (Admin)</a>
-    </p>
+    <p style="text-align:center;margin-top:16px;"><a href="{{ url_for('login') }}">Back to Login</a></p>
 </div>
 </body>
 </html>

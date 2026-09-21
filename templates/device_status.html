@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Device Status</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body class="login-page">
+<div class="login-card">
+    <div class="login-brand"><img src="{{ url_for('static', filename='logo.png') }}" alt="UNITY PATH RECOVERY AND COLLECTION SERVICES OPC"></div>
+    <h1>Device Status</h1>
+    <p><b>Device ID:</b></p>
+    <code style="word-break:break-all;">{{ device_id }}</code>
+    {% if device %}
+        <div class="info-box" style="margin-top:16px;">
+            <b>Status:</b> {{ device.status }}<br>
+            <b>Name:</b> {{ device.device_name or '—' }}<br>
+            {% if device.employee %}
+            <b>Employee:</b> {{ device.employee.first_name }} {{ device.employee.last_name }}
+            {% endif %}
+        </div>
+    {% else %}
+        <div class="alert warning" style="margin-top:16px;">
+            This device is not registered.
+        </div>
+    {% endif %}
+    <div class="actions">
+        <a class="btn" href="{{ url_for('login') }}">Back to Login</a>
+    </div>
+</div>
+</body>
+</html>
