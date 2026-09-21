@@ -1201,7 +1201,7 @@ def calculate_payroll_values(employee, period_start, period_end, settings,
         "adjustment_deduction": adjustment_deduction,
         "adjustment_note": adjustment_note,
         "net_pay": net_pay,
-        "status": "Draft",
+        "status": "Approved",
     }
 
 
@@ -1517,12 +1517,85 @@ def _money(value):
 
 
 
+def _valid_second_cutoff_payroll_query(year=None, month=None):
+    """Return second-cutoff payrolls that are the source of monthly contributions."""
+    query = Payroll.query.filter(Payroll.status.in_(["Approved", "Paid"]))
+    if year is not None and month is not None:
+        start = date(year, month, 16)
+        end = date(year + 1, 1, 1) if month == 12 else date(year, month + 1, 1)
+        query = query.filter(Payroll.period_start == start, Payroll.period_end == date(year, month, calendar.monthrange(year, month)[1]))
+    return query
+
+
+def cleanup_orphan_financial_records(year=None, month=None):
+    """Remove financial rows that no longer have a valid source payroll.
+
+    Payroll is the source of truth. A monthly contribution is valid only when
+    it points to an existing Approved/Paid 2nd-cutoff payroll for the same
+    employee and month. This also repairs legacy rows created before
+    source_payroll_id existed.
+
+    This function is intentionally defensive because production databases can
+    contain old financial rows from previous EMS versions.
+    """
+    # Salary expenses must point to an existing payroll.
+    salary_expenses = Expense.query.filter_by(source_type="payroll_salary").all()
+    for expense in salary_expenses:
+        try:
+            payroll_id = int((expense.source_key or "").split(":", 1)[1])
+        except (ValueError, IndexError, TypeError):
+            payroll_id = None
+        if payroll_id is None or db.session.get(Payroll, payroll_id) is None:
+            db.session.delete(expense)
+
+    # Every contribution record must have a live 2nd-cutoff payroll. Do not
+    # keep legacy rows merely because another payroll happens to share a month.
+    contrib_query = MonthlyContribution.query
+    if year is not None and month is not None:
+        contrib_query = contrib_query.filter_by(contribution_year=year, contribution_month=month)
+    for record in contrib_query.all():
+        source = db.session.get(Payroll, record.source_payroll_id) if record.source_payroll_id else None
+        valid = bool(source and is_second_cutoff(source.period_start, source.period_end)
+                     and source.status in ("Approved", "Paid")
+                     and source.employee_id == record.employee_id
+                     and source.period_end.year == record.contribution_year
+                     and source.period_end.month == record.contribution_month)
+        if not valid:
+            db.session.delete(record)
+
+    # Contribution expense rows are monthly employer-cost aggregates. Remove
+    # them whenever no valid contribution records remain for that month.
+    contribution_expenses = Expense.query.filter_by(source_type="payroll_contribution").all()
+    for expense in contribution_expenses:
+        try:
+            period_key, field = (expense.source_key or "").split(":", 1)
+            y, m = [int(x) for x in period_key.split("-")]
+        except (ValueError, TypeError):
+            db.session.delete(expense)
+            continue
+        if year is not None and month is not None and (y != year or m != month):
+            continue
+        valid_exists = False
+        for record in MonthlyContribution.query.filter_by(contribution_year=y, contribution_month=m).all():
+            source = db.session.get(Payroll, record.source_payroll_id) if record.source_payroll_id else None
+            if (source and is_second_cutoff(source.period_start, source.period_end)
+                    and source.status in ("Approved", "Paid")
+                    and source.employee_id == record.employee_id):
+                valid_exists = True
+                break
+        if not valid_exists:
+            db.session.delete(expense)
+
+    db.session.commit()
+
+
 def sync_payroll_salary_expenses(year=None, month=None):
     """Create/update salary expense rows from approved/paid payrolls.
-    Draft payrolls are not treated as obligations. Approved = Pending, Paid = Paid.
-    Uses net pay because this tracker represents actual salary cash paid to employees;
-    statutory remittances are tracked separately.
+
+    Approved = Pending, Paid = Paid. Deleted payrolls are removed by the
+    orphan cleanup above, so salary cannot remain stale in the reports.
     """
+    cleanup_orphan_financial_records(year, month)
     query = Payroll.query.filter(Payroll.status.in_(["Approved", "Paid"]))
     if year is not None and month is not None:
         start = date(year, month, 1)
@@ -1549,7 +1622,6 @@ def sync_payroll_salary_expenses(year=None, month=None):
                 status=status, remarks=remarks, source_type="payroll_salary", source_key=source_key
             ))
         else:
-            # Preserve manually-set expense status only for safety; payroll is the source of truth.
             expense.amount = amount
             expense.name = f"Salary - {employee_name} ({payroll.period_start:%b %d}–{payroll.period_end:%b %d, %Y})"
             expense.due_date = payroll.pay_date or payroll.period_end
@@ -1648,80 +1720,156 @@ def expense_report():
 
 
 def sync_contribution_expenses(year, month):
-    """Create/update statutory remittance checklist rows from Payroll."""
-    rows = MonthlyContribution.query.filter_by(contribution_year=year, contribution_month=month).all()
-    if not rows:
-        return
+    """Create/update statutory remittance checklist rows from active payrolls."""
+    cleanup_orphan_financial_records(year, month)
+    rows = (MonthlyContribution.query
+            .join(Payroll, MonthlyContribution.source_payroll_id == Payroll.id)
+            .filter(
+                MonthlyContribution.contribution_year == year,
+                MonthlyContribution.contribution_month == month,
+                Payroll.status.in_(["Approved", "Paid"]),
+                Payroll.period_start == date(year, month, 16),
+                Payroll.period_end == date(year, month, calendar.monthrange(year, month)[1]),
+            ).all())
     period_key = f"{year}-{month:02d}"
     specs = [("SSS", "sss"), ("PhilHealth", "philhealth"), ("Pag-IBIG", "pagibig")]
     period_date = date(year, month, 1)
     for label, field in specs:
-        employee_total = sum(float(getattr(r, f"{field}_collected") or 0) for r in rows)
-        employer_total = sum(float(getattr(r, f"{field}_employer") or 0) for r in rows)
-        amount = round(employee_total + employer_total, 2)
-        if amount <= 0:
-            continue
+        # The company expense is employer share only. Employee deductions are
+        # withheld/remitted and are shown separately as employee obligations.
+        employer_total = round(sum(float(getattr(r, f"{field}_employer") or 0) for r in rows), 2)
         source_key = f"{period_key}:{field}"
         expense = Expense.query.filter_by(source_type="payroll_contribution", source_key=source_key).first()
-        remarks = f"Auto-generated from Payroll. Employee share: ₱{employee_total:,.2f}; Company share: ₱{employer_total:,.2f}."
+        if employer_total <= 0:
+            if expense is not None and expense.status != "Paid":
+                db.session.delete(expense)
+            continue
+        employee_due = round(sum(float(getattr(r, f"{field}_due") or 0) for r in rows), 2)
+        employee_collected = round(sum(float(getattr(r, f"{field}_collected") or 0) for r in rows), 2)
+        remarks = (
+            f"Auto-generated from Payroll. Employee share due: ₱{employee_due:,.2f}; "
+            f"actually deducted: ₱{employee_collected:,.2f}; Company share: ₱{employer_total:,.2f}."
+        )
         if not expense:
-            db.session.add(Expense(expense_date=period_date, name=f"{label} - {period_key}", category="Government",
-                                    amount=amount, status="Pending", source_type="payroll_contribution", source_key=source_key,
-                                    remarks=remarks))
+            db.session.add(Expense(
+                expense_date=period_date, name=f"{label} - {period_key}", category="Government",
+                amount=employer_total, status="Pending", source_type="payroll_contribution",
+                source_key=source_key, remarks=remarks
+            ))
         elif expense.status != "Paid":
-            expense.amount = amount
+            expense.amount = employer_total
             expense.remarks = remarks
     db.session.commit()
 
 
 def sync_contribution_expenses_all_months():
     """Sync all payroll contribution periods into the expense checklist."""
-    periods = db.session.query(MonthlyContribution.contribution_year, MonthlyContribution.contribution_month).distinct().all()
+    periods = db.session.query(
+        MonthlyContribution.contribution_year, MonthlyContribution.contribution_month
+    ).distinct().all()
     for year, month in periods:
         sync_contribution_expenses(year, month)
 
 
-@app.route("/financial-summary", methods=["GET", "POST"])
+@app.route("/financial-summary", methods=["GET"])
 @admin_required
 def financial_summary():
     today = date.today()
     try:
-        year = int(request.args.get("year", today.year)); month = int(request.args.get("month", today.month))
+        year = int(request.args.get("year", today.year))
+        month = int(request.args.get("month", today.month))
     except (TypeError, ValueError):
         year, month = today.year, today.month
-    if month < 1 or month > 12: month = today.month
+    if month < 1 or month > 12:
+        month = today.month
+
     start = date(year, month, 1)
     end = date(year + 1, 1, 1) if month == 12 else date(year, month + 1, 1)
-    if request.method == "POST":
-        try:
-            income_date = datetime.strptime(request.form["income_date"], "%Y-%m-%d").date()
-            amount = float(request.form["amount"])
-            if amount < 0: raise ValueError
-            db.session.add(FinancialIncome(income_date=income_date, name=request.form["name"].strip(),
-                                           category=request.form.get("category", "Other Income").strip() or "Other Income",
-                                           amount=amount, remarks=request.form.get("remarks", "").strip()))
-            db.session.commit(); flash("Income recorded.", "success")
-        except (KeyError, ValueError):
-            flash("Please check the income details and amount.", "danger")
-        return redirect(url_for("financial_summary", year=year, month=month))
+
+    # Production-safe financial synchronization. Ensure legacy databases have
+    # the V80 source-link columns before any ORM query uses them, then enforce
+    # Payroll as the single source of truth.
+    migrate_v80_financial_link_columns()
+    purge_month_without_payroll(year, month)
+    cleanup_orphan_financial_records(year, month)
     sync_contribution_expenses(year, month)
     sync_payroll_salary_expenses(year, month)
-    incomes = FinancialIncome.query.filter(FinancialIncome.income_date >= start, FinancialIncome.income_date < end).order_by(FinancialIncome.income_date.desc(), FinancialIncome.id.desc()).all()
-    expenses = Expense.query.filter(Expense.expense_date >= start, Expense.expense_date < end).all()
+
+    expenses = Expense.query.filter(
+        Expense.expense_date >= start, Expense.expense_date < end
+    ).all()
     paid_rows = [e for e in expenses if e.status == "Paid"]
     pending_rows = [e for e in expenses if e.status == "Pending"]
-    income_total = round(sum(float(i.amount or 0) for i in incomes), 2)
-    paid_expenses = round(sum(float(e.amount or 0) for e in paid_rows), 2)
+
+    # Commission upload is the company's income source. Total Collection is
+    # income; Commission is an automatic company expense with no Paid/Pending
+    # status in the Commission Report.
+    commission_rows = CommissionRecord.query.all()
+    selected_commissions = []
+    for r in commission_rows:
+        period = (r.period or "").strip().rstrip(".")
+        matched = False
+        for fmt in ("%B %Y", "%b %Y"):
+            try:
+                d = datetime.strptime(period, fmt)
+                matched = (d.year == year and d.month == month)
+                break
+            except ValueError:
+                pass
+        if not matched:
+            matched = period == f"{year}-{month:02d}"
+        if matched:
+            selected_commissions.append(r)
+
+    commission_income = round(sum(float(r.total_collection or 0) for r in selected_commissions), 2)
+    commission_expense = round(sum(float(r.commission or 0) for r in selected_commissions), 2)
+    income_total = commission_income
+    paid_expenses = round(sum(float(e.amount or 0) for e in paid_rows) + commission_expense, 2)
     pending_expenses = round(sum(float(e.amount or 0) for e in pending_rows), 2)
     profit = round(income_total - paid_expenses, 2)
 
     def cat_total(rows, category):
         return round(sum(float(e.amount or 0) for e in rows if e.category == category), 2)
+
     def gov_total(rows, label):
-        return round(sum(float(e.amount or 0) for e in rows if e.source_type == "payroll_contribution" and label.lower() in (e.name or "").lower()), 2)
+        return round(sum(
+            float(e.amount or 0) for e in rows
+            if e.source_type == "payroll_contribution" and label.lower() in (e.name or "").lower()
+        ), 2)
+
+    # Pending government liability is employee amount due + employer share.
+    contrib_rows = (MonthlyContribution.query
+                    .join(Payroll, MonthlyContribution.source_payroll_id == Payroll.id)
+                    .filter(
+                        MonthlyContribution.contribution_year == year,
+                        MonthlyContribution.contribution_month == month,
+                        Payroll.status.in_(["Approved", "Paid"]),
+                        Payroll.period_start == date(year, month, 16),
+                        Payroll.period_end == date(year, month, calendar.monthrange(year, month)[1]),
+                    ).all())
+    pending_gov = {}
+    for label, field in (("sss", "sss"), ("philhealth", "philhealth"), ("pagibig", "pagibig")):
+        gov_expense = Expense.query.filter_by(
+            source_type="payroll_contribution",
+            source_key=f"{year}-{month:02d}:{field}"
+        ).first()
+        if gov_expense is not None and gov_expense.status == "Paid":
+            pending_gov[label] = 0.0
+        else:
+            pending_gov[label] = round(sum(
+                float(getattr(r, f"{field}_due") or 0) +
+                float(getattr(r, f"{field}_employer") or 0)
+                for r in contrib_rows
+            ), 2)
+    pending_gov_total = round(sum(pending_gov.values()), 2)
+    non_gov_pending = round(sum(
+        float(e.amount or 0) for e in pending_rows if e.source_type != "payroll_contribution"
+    ), 2)
+    pending_expenses = round(non_gov_pending + pending_gov_total, 2)
 
     paid_breakdown = {
         "salary": cat_total(paid_rows, "Salary / Payroll"),
+        "commission": commission_expense,
         "sss": gov_total(paid_rows, "sss"),
         "philhealth": gov_total(paid_rows, "philhealth"),
         "pagibig": gov_total(paid_rows, "pag-ibig"),
@@ -1731,18 +1879,21 @@ def financial_summary():
     }
     pending_breakdown = {
         "salary": cat_total(pending_rows, "Salary / Payroll"),
-        "sss": gov_total(pending_rows, "sss"),
-        "philhealth": gov_total(pending_rows, "philhealth"),
-        "pagibig": gov_total(pending_rows, "pag-ibig"),
+        "sss": pending_gov["sss"],
+        "philhealth": pending_gov["philhealth"],
+        "pagibig": pending_gov["pagibig"],
         "tax": cat_total(pending_rows, "Tax"),
         "other": round(sum(float(e.amount or 0) for e in pending_rows if e.category not in {"Salary / Payroll", "Tax", "Government"} and e.source_type != "payroll_contribution"), 2),
-        "government_total": round(sum(float(e.amount or 0) for e in pending_rows if e.source_type == "payroll_contribution"), 2),
+        "government_total": pending_gov_total,
     }
-    commission_total = round(sum(float(r.commission or 0) for r in CommissionRecord.query.filter_by(period=f"{year}-{month:02d}").all()), 2)
-    return render_template("financial_summary.html", year=year, month=month, incomes=incomes,
-                           income_total=income_total, paid_expenses=paid_expenses, pending_expenses=pending_expenses,
-                           profit=profit, paid_breakdown=paid_breakdown, pending_breakdown=pending_breakdown,
-                           commission_total=commission_total)
+
+    return render_template(
+        "financial_summary.html", year=year, month=month, incomes=[],
+        income_total=income_total, paid_expenses=paid_expenses,
+        pending_expenses=pending_expenses, profit=profit,
+        paid_breakdown=paid_breakdown, pending_breakdown=pending_breakdown,
+        commission_total=commission_expense, commission_income=commission_income
+    )
 
 
 @app.route("/income/delete/<int:income_id>", methods=["POST"])
@@ -1951,12 +2102,12 @@ def dashboard():
     total_payroll = Payroll.query.count()
     sync_contribution_expenses_all_months()
     sync_payroll_salary_expenses()
-    income_total = round(sum(float(i.amount or 0) for i in FinancialIncome.query.all()), 2)
+    income_total = round(sum(float(r.total_collection or 0) for r in CommissionRecord.query.all()), 2)
+    commission_total = round(sum(float(r.commission or 0) for r in CommissionRecord.query.all()), 2)
     expenses = Expense.query.all()
-    paid_expenses = round(sum(float(e.amount or 0) for e in expenses if e.status == "Paid"), 2)
+    paid_expenses = round(sum(float(e.amount or 0) for e in expenses if e.status == "Paid") + commission_total, 2)
     pending_expenses = round(sum(float(e.amount or 0) for e in expenses if e.status == "Pending"), 2)
     profit = round(income_total - paid_expenses, 2)
-    commission_total = round(sum(float(r.commission or 0) for r in CommissionRecord.query.all()), 2)
     paid_payroll = round(sum(float(p.net_pay or 0) for p in Payroll.query.filter_by(status="Paid").all()), 2)
 
     return render_template(
@@ -4584,6 +4735,40 @@ def monthly_contributions():
     )
 
 
+def purge_month_without_payroll(year, month):
+    """Hard source-of-truth guard: no 2nd payroll means no monthly shares.
+
+    This handles legacy/stale rows even when they have no source_payroll_id or
+    point to a deleted/invalid payroll. It is safe to call before rendering
+    Contribution Shares and the Financial Summary.
+    """
+    start = date(year, month, 16)
+    end = date(year, month, calendar.monthrange(year, month)[1])
+    valid_payroll_ids = {p.id for p in Payroll.query.filter(
+        Payroll.status.in_(["Approved", "Paid"]),
+        Payroll.period_start == start,
+        Payroll.period_end == end,
+    ).all()}
+
+    records = MonthlyContribution.query.filter_by(
+        contribution_year=year, contribution_month=month
+    ).all()
+    for record in records:
+        if record.source_payroll_id not in valid_payroll_ids:
+            db.session.delete(record)
+
+    # Remove auto-generated government expense rows when there is no valid
+    # contribution source. A manually paid row is also stale if its payroll
+    # source no longer exists, so it must be removed rather than kept forever.
+    if not valid_payroll_ids:
+        for expense in Expense.query.filter_by(source_type="payroll_contribution").all():
+            if expense.source_key and expense.source_key.startswith(f"{year}-{month:02d}:"):
+                db.session.delete(expense)
+
+    db.session.commit()
+    return valid_payroll_ids
+
+
 @app.route("/payroll/contributions")
 @admin_required
 def payroll_contributions():
@@ -4602,10 +4787,16 @@ def payroll_contributions():
     if month < 1 or month > 12:
         month = today.month
 
+    # Payroll is the source of truth for statutory contributions. Clean any
+    # orphaned contribution records first, then show only employees who have
+    # an actual finalized (2nd-cutoff) payroll contribution record for this
+    # month. Do NOT calculate contributions for every active employee when no
+    # payroll exists; that would create phantom obligations.
+    # Ensure the selected month cannot display phantom shares after payroll
+    # deletion. Payroll is the only source of monthly statutory obligations.
+    purge_month_without_payroll(year, month)
+    cleanup_orphan_financial_records(year, month)
     settings = PayrollSettings.query.first()
-    employees = Employee.query.filter_by(employment_status="Active").order_by(
-        Employee.last_name.asc(), Employee.first_name.asc()
-    ).all()
 
     totals = {
         "sss_employee": 0.0, "sss_employer": 0.0,
@@ -4616,39 +4807,44 @@ def payroll_contributions():
     }
     rows = []
 
-    for employee in employees:
-        record = get_monthly_contribution_record(employee.id, year, month)
-        if record is not None:
-            row = {
-                "employee": employee,
-                "sss_remuneration": float(record.sss_remuneration or 0),
-                "sss_msc": float(record.sss_msc or 0),
-                "philhealth_basic_salary": float(record.philhealth_basic_salary or 0),
-                "pagibig_monthly_compensation": float(record.pagibig_monthly_compensation or 0),
-                "sss_employee": float(record.sss_due or 0),
-                "sss_employer": float(record.sss_employer or 0),
-                "philhealth_employee": float(record.philhealth_due or 0),
-                "philhealth_employer": float(record.philhealth_employer or 0),
-                "pagibig_employee": float(record.pagibig_due or 0),
-                "pagibig_employer": float(record.pagibig_employer or 0),
-                "sss_collected": float(record.sss_collected or 0),
-                "philhealth_collected": float(record.philhealth_collected or 0),
-                "pagibig_collected": float(record.pagibig_collected or 0),
-                "sss_uncollected": float(record.sss_uncollected or 0),
-                "philhealth_uncollected": float(record.philhealth_uncollected or 0),
-                "pagibig_uncollected": float(record.pagibig_uncollected or 0),
-                "status": record.status,
-            }
-        else:
-            shares = get_monthly_contribution_shares(employee, settings, year, month)
-            row = {
-                "employee": employee, **shares,
-                "sss_collected": 0.0, "philhealth_collected": 0.0, "pagibig_collected": 0.0,
-                "sss_uncollected": shares["sss_employee"],
-                "philhealth_uncollected": shares["philhealth_employee"],
-                "pagibig_uncollected": shares["pagibig_employee"],
-                "status": "Not finalized",
-            }
+    # Only finalized monthly contribution records are displayed. These records
+    # are created by the 2nd payroll. If the payroll is deleted, its linked
+    # MonthlyContribution is deleted by the payroll delete route and by the
+    # orphan cleanup above, so this page becomes empty automatically.
+    records = (MonthlyContribution.query
+               .join(Payroll, MonthlyContribution.source_payroll_id == Payroll.id)
+               .join(Employee)
+               .filter(
+                   MonthlyContribution.contribution_year == year,
+                   MonthlyContribution.contribution_month == month,
+                   Payroll.status.in_(["Approved", "Paid"]),
+                   Payroll.period_start == date(year, month, 16),
+                   Payroll.period_end == date(year, month, calendar.monthrange(year, month)[1]),
+               )
+               .order_by(Employee.last_name.asc(), Employee.first_name.asc()).all())
+
+    for record in records:
+        employee = record.employee
+        row = {
+            "employee": employee,
+            "sss_remuneration": float(record.sss_remuneration or 0),
+            "sss_msc": float(record.sss_msc or 0),
+            "philhealth_basic_salary": float(record.philhealth_basic_salary or 0),
+            "pagibig_monthly_compensation": float(record.pagibig_monthly_compensation or 0),
+            "sss_employee": float(record.sss_due or 0),
+            "sss_employer": float(record.sss_employer or 0),
+            "philhealth_employee": float(record.philhealth_due or 0),
+            "philhealth_employer": float(record.philhealth_employer or 0),
+            "pagibig_employee": float(record.pagibig_due or 0),
+            "pagibig_employer": float(record.pagibig_employer or 0),
+            "sss_collected": float(record.sss_collected or 0),
+            "philhealth_collected": float(record.philhealth_collected or 0),
+            "pagibig_collected": float(record.pagibig_collected or 0),
+            "sss_uncollected": float(record.sss_uncollected or 0),
+            "philhealth_uncollected": float(record.philhealth_uncollected or 0),
+            "pagibig_uncollected": float(record.pagibig_uncollected or 0),
+            "status": record.status,
+        }
 
         row["employee_due"] = round(row["sss_employee"] + row["philhealth_employee"] + row["pagibig_employee"], 2)
         row["employee_collected"] = round(row["sss_collected"] + row["philhealth_collected"] + row["pagibig_collected"], 2)
@@ -4946,6 +5142,25 @@ def migrate_v19_payroll_columns():
             ))
 
 
+def migrate_v80_financial_link_columns():
+    """Ensure V78/V79 financial-link columns exist on older production DBs."""
+    from sqlalchemy import text
+    with db.engine.begin() as conn:
+        tables = set(db.inspect(db.engine).get_table_names())
+        if "monthly_contributions" in tables:
+            existing = _table_columns("monthly_contributions")
+            if "source_payroll_id" not in existing:
+                conn.execute(text("ALTER TABLE monthly_contributions ADD COLUMN source_payroll_id INTEGER"))
+        if "expenses" in tables:
+            existing = _table_columns("expenses")
+            for col, definition in [
+                ("source_type", "VARCHAR(40)"),
+                ("source_key", "VARCHAR(100)"),
+            ]:
+                if col not in existing:
+                    conn.execute(text(f"ALTER TABLE expenses ADD COLUMN {col} {definition}"))
+
+
 def migrate_v28_contribution_columns():
     """Add V28 statutory-basis fields to existing monthly contribution records."""
     from sqlalchemy import text
@@ -5109,6 +5324,14 @@ def seed_2026_holidays():
     db.session.commit()
 
 
+@app.errorhandler(500)
+def handle_internal_server_error(error):
+    # Keep the browser response clean while writing the actual exception to
+    # Render/Gunicorn logs for diagnosis instead of hiding the root cause.
+    app.logger.exception("EMS Internal Server Error", exc_info=error)
+    return "Internal Server Error", 500
+
+
 def initialize_database():
     with app.app_context():
         db.create_all()
@@ -5122,8 +5345,12 @@ def initialize_database():
         migrate_v19_payroll_columns()
         migrate_v12_columns()
         migrate_v28_contribution_columns()
+        migrate_v80_financial_link_columns()
         migrate_v59_email_columns()
         normalize_attendance_statuses()
+        # Payroll no longer uses Draft. Existing payroll rows from older versions
+        # are treated as Approved so they immediately follow the new workflow.
+        db.session.query(Payroll).filter(Payroll.status == "Draft").update({"status": "Approved"}, synchronize_session=False)
         seed_2026_holidays()
 
         if not User.query.filter_by(username="admin").first():
