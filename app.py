@@ -35,7 +35,7 @@ from dotenv import load_dotenv
 
 from extensions import db
 
-from models import Device, Employee, User, Attendance, Payroll, PayrollSettings, FinalPay, EmployeeLoan, LoanPayment, MonthlyContribution, Holiday, LeaveRequest, CommissionRecord, Expense
+from models import Device, Employee, User, Attendance, Payroll, PayrollSettings, FinalPay, EmployeeLoan, LoanPayment, MonthlyContribution, Holiday, LeaveRequest, CommissionRecord, Expense, FinancialIncome
 
 
 # Standard company attendance schedule

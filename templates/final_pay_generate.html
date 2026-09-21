@@ -3,7 +3,7 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}"></head>
 <body>
 <div class="sidebar">
-<div class="brand-logo"><img src="{{ url_for('static', filename='logo.png') }}" alt="UNITY PATH RECOVERY AND COLLECTION SERVICES OPC"></div>
+<div class="brand-logo"><img src="{{ url_for('static', filename='logo.png') }}" alt="UNITY PATH RECOVERY AND COLLECTION SERVICES OPC"></div><a href="{{ url_for('commission_report') }}">Commission Report</a><a href="{{ url_for('expense_report') }}">Expense Trackers</a><a href="{{ url_for('financial_summary') }}">Profit &amp; Expenses Summary</a>
 <a href="{{ url_for('dashboard') }}">Dashboard</a>
 <a href="{{ url_for('employees') }}">Employees</a>
 <a href="{{ url_for('attendance') }}">Attendance</a>
