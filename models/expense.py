@@ -15,6 +15,7 @@ class Expense(db.Model):
     remarks = db.Column(db.Text, nullable=True)
     source_type = db.Column(db.String(40), nullable=True)
     source_key = db.Column(db.String(100), nullable=True)
+    payment_reference = db.Column(db.String(150), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
