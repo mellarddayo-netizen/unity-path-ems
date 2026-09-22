@@ -35,7 +35,7 @@ from dotenv import load_dotenv
 
 from extensions import db
 
-from models import Device, Employee, User, Attendance, Payroll, PayrollSettings, FinalPay, EmployeeLoan, LoanPayment, MonthlyContribution, Holiday, LeaveRequest, CommissionRecord, Expense, FinancialIncome
+from models import Device, Employee, User, Attendance, Payroll, PayrollSettings, FinalPay, EmployeeLoan, LoanPayment, MonthlyContribution, Holiday, LeaveRequest, CommissionRecord, Expense, FinancialIncome, ThirteenthMonthRecord
 
 
 # Standard company attendance schedule
@@ -938,19 +938,22 @@ def calculate_deductions(employee, gross_pay, settings,
     }
 
 
-def calculate_ytd_basic_pay(employee_id, year):
-    """Sum basic pay from payroll records for a calendar year."""
+def calculate_ytd_basic_pay(employee_id, year, through_date=None):
+    """Sum basic pay actually covered by payroll records for a calendar year.
+
+    ``through_date`` is used for separated employees so a later payroll period
+    cannot accidentally be included after the employee's last day.
+    """
     start = date(year, 1, 1)
     end = date(year, 12, 31)
-    # 13th-month pay is based on basic salary actually earned during the
-    # calendar year. A payroll may still be in Draft while HR is preparing
-    # it, so the report must include Draft, Approved, and Paid payrolls.
-    # Only payrolls that are later deleted are removed from this accrual.
+    if through_date is not None:
+        end = min(end, through_date)
+
     records = Payroll.query.filter(
         Payroll.employee_id == employee_id,
         Payroll.period_start >= start,
-        Payroll.period_start <= end,
-        Payroll.status.in_(["Draft", "Approved", "Paid"])
+        Payroll.period_end <= end,
+        Payroll.status.in_(["Approved", "Paid"])
     ).all()
     return round(sum(float(p.basic_pay or 0) for p in records), 2)
 
@@ -2051,8 +2054,9 @@ def financial_summary():
         "sss": gov_total(paid_rows, "sss"),
         "philhealth": gov_total(paid_rows, "philhealth"),
         "pagibig": gov_total(paid_rows, "pag-ibig"),
+        "thirteenth_month": cat_total(paid_rows, "13th Month Pay"),
         "tax": cat_total(paid_rows, "Tax"),
-        "other": round(sum(float(e.amount or 0) for e in paid_rows if e.category not in {"Salary / Payroll", "Tax", "Government"} and e.source_type != "payroll_contribution"), 2),
+        "other": round(sum(float(e.amount or 0) for e in paid_rows if e.category not in {"Salary / Payroll", "Tax", "Government", "13th Month Pay"} and e.source_type != "payroll_contribution"), 2),
         "government_total": round(sum(float(e.amount or 0) for e in paid_rows if e.source_type == "payroll_contribution"), 2),
     }
     pending_breakdown = {
@@ -2060,8 +2064,9 @@ def financial_summary():
         "sss": pending_gov["sss"],
         "philhealth": pending_gov["philhealth"],
         "pagibig": pending_gov["pagibig"],
+        "thirteenth_month": cat_total(pending_rows, "13th Month Pay"),
         "tax": cat_total(pending_rows, "Tax"),
-        "other": round(sum(float(e.amount or 0) for e in pending_rows if e.category not in {"Salary / Payroll", "Tax", "Government"} and e.source_type != "payroll_contribution"), 2),
+        "other": round(sum(float(e.amount or 0) for e in pending_rows if e.category not in {"Salary / Payroll", "Tax", "Government", "13th Month Pay"} and e.source_type != "payroll_contribution"), 2),
         "government_total": pending_gov_total,
     }
 
@@ -5151,40 +5156,167 @@ def paid_final_pay(id):
     return redirect(url_for("view_final_pay", id=id))
 
 
-@app.route("/payroll/13th-month")
+
+def sync_thirteenth_month_records(year):
+    """Create/update one persistent 13th-month tracker row per employee/year.
+
+    The amount is always recalculated from the same basic-salary source used by
+    the 13th Month report. Payment status is intentionally preserved so that
+    refreshing/recalculating payroll does not erase a prior Paid status.
+    """
+    employees = Employee.query.order_by(Employee.last_name.asc(), Employee.first_name.asc()).all()
+    year_start = date(year, 1, 1)
+    year_end = date(year, 12, 31)
+    changed = False
+    for employee in employees:
+        separation_date = employee.separation_date
+        separated_in_year = (
+            separation_date is not None
+            and year_start <= separation_date <= year_end
+            and (employee.employment_status or "").strip().lower() in ("resigned", "separated", "inactive")
+        )
+        through_date = separation_date if separated_in_year else None
+        basic = calculate_ytd_basic_pay(employee.id, year, through_date=through_date)
+
+        # Match the existing report's Final Pay treatment for unpaid basic pay
+        # through separation. Avoid adding it twice if it is already represented
+        # by an approved/paid payroll.
+        if separated_in_year:
+            final = FinalPay.query.filter(
+                FinalPay.employee_id == employee.id,
+                FinalPay.separation_date == separation_date,
+                FinalPay.separation_date >= year_start,
+                FinalPay.separation_date <= year_end
+            ).order_by(FinalPay.id.desc()).first()
+            if final:
+                basic += float(final.basic_pay or 0)
+        basic = round(basic, 2)
+        amount = round(basic / 12.0, 2)
+        due_date = (separation_date + timedelta(days=30)) if separated_in_year else date(year, 12, 24)
+        rec = ThirteenthMonthRecord.query.filter_by(employee_id=employee.id, year=year).first()
+        if rec is None:
+            rec = ThirteenthMonthRecord(employee_id=employee.id, year=year, status="Pending")
+            db.session.add(rec)
+            changed = True
+        if (round(float(rec.basic_salary_earned or 0),2) != basic or
+            round(float(rec.thirteenth_amount or 0),2) != amount or
+            rec.due_date != due_date):
+            rec.basic_salary_earned = basic
+            rec.thirteenth_amount = amount
+            rec.due_date = due_date
+            changed = True
+        rec.remarks = "Separated – Pro-rated" if separated_in_year else "Regular Year-end"
+    if changed:
+        db.session.commit()
+
+
+def sync_thirteenth_month_expenses(year):
+    """Mirror 13th-month tracker rows into company expense records."""
+    records = ThirteenthMonthRecord.query.filter_by(year=year).all()
+    for rec in records:
+        source_key = f"{year}:{rec.id}"
+        expense = Expense.query.filter_by(source_type="thirteenth_month", source_key=source_key).first()
+        if expense is None:
+            expense = Expense(
+                expense_date=rec.paid_date or rec.due_date or date(year,12,24),
+                name=f"13th Month - {rec.employee.first_name} {rec.employee.last_name}",
+                category="13th Month Pay",
+                amount=round(float(rec.thirteenth_amount or 0),2),
+                due_date=rec.due_date,
+                paid_date=rec.paid_date if rec.status == "Paid" else None,
+                status=rec.status,
+                remarks=f"Auto-generated from 13th Month Tracker {year}.",
+                source_type="thirteenth_month",
+                source_key=source_key,
+                payment_reference=rec.payment_reference,
+            )
+            db.session.add(expense)
+        else:
+            expense.amount = round(float(rec.thirteenth_amount or 0),2)
+            expense.name = f"13th Month - {rec.employee.first_name} {rec.employee.last_name}"
+            expense.category = "13th Month Pay"
+            expense.due_date = rec.due_date
+            expense.status = rec.status
+            expense.paid_date = rec.paid_date if rec.status == "Paid" else None
+            expense.payment_reference = rec.payment_reference
+            expense.remarks = f"Auto-generated from 13th Month Tracker {year}."
+            if rec.status == "Paid" and rec.paid_date:
+                expense.expense_date = rec.paid_date
+            elif rec.due_date:
+                expense.expense_date = rec.due_date
+    db.session.commit()
+
+
+@app.route("/payroll/13th-month", methods=["GET", "POST"])
 @admin_required
 def thirteenth_month_report():
-    year = int(request.args.get("year") or date.today().year)
-    employees = Employee.query.order_by(Employee.last_name.asc()).all()
-    rows = []
+    today = date.today()
+    year = request.args.get("year", type=int) or request.form.get("year", type=int) or today.year
+    if year < 2000 or year > 2100:
+        year = today.year
 
-    for employee in employees:
-        basic = calculate_ytd_basic_pay(employee.id, year)
-        final = FinalPay.query.filter(
-            FinalPay.employee_id == employee.id,
-            FinalPay.separation_date >= date(year, 1, 1),
-            FinalPay.separation_date <= date(year, 12, 31)
-        ).first()
-        if final:
-            basic += float(final.basic_pay or 0)
+    if request.method == "POST":
+        action = request.form.get("action", "")
+        ids = []
+        for raw in request.form.getlist("record_ids"):
+            try:
+                ids.append(int(raw))
+            except (TypeError, ValueError):
+                pass
+        selected = ThirteenthMonthRecord.query.filter(
+            ThirteenthMonthRecord.id.in_(ids), ThirteenthMonthRecord.year == year
+        ).all() if ids else []
+        if action in ("mark_paid", "mark_pending"):
+            paid_date = parse_date(request.form.get("paid_date")) or today
+            ref = (request.form.get("payment_reference") or "").strip()[:150]
+            for rec in selected:
+                if action == "mark_paid":
+                    rec.status = "Paid"
+                    rec.paid_date = paid_date
+                    if ref:
+                        rec.payment_reference = ref
+                else:
+                    rec.status = "Pending"
+                    rec.paid_date = None
+            db.session.commit()
+            sync_thirteenth_month_expenses(year)
+            flash(f"{len(selected)} 13th month record(s) updated.", "success")
+            return redirect(url_for("thirteenth_month_report", year=year))
 
-        rows.append({
-            "employee": employee,
-            "basic": round(basic, 2),
-            "thirteenth": round(basic / 12.0, 2)
-        })
+    sync_thirteenth_month_records(year)
+    sync_thirteenth_month_expenses(year)
+    records = ThirteenthMonthRecord.query.filter_by(year=year).join(Employee).order_by(Employee.last_name.asc(), Employee.first_name.asc()).all()
+    total_basic = round(sum(float(r.basic_salary_earned or 0) for r in records), 2)
+    total_thirteenth = round(sum(float(r.thirteenth_amount or 0) for r in records), 2)
+    paid_total = round(sum(float(r.thirteenth_amount or 0) for r in records if r.status == "Paid"), 2)
+    pending_total = round(sum(float(r.thirteenth_amount or 0) for r in records if r.status == "Pending"), 2)
+    return render_template("thirteenth_month.html", records=records, year=year,
+                           total_basic=total_basic, total_thirteenth=total_thirteenth,
+                           paid_total=paid_total, pending_total=pending_total, today=today)
 
-    total_basic = round(sum(r["basic"] for r in rows), 2)
-    total_thirteenth = round(sum(r["thirteenth"] for r in rows), 2)
 
-    return render_template(
-        "thirteenth_month.html",
-        rows=rows,
-        year=year,
-        total_basic=total_basic,
-        total_thirteenth=total_thirteenth
-    )
-
+@app.route("/payroll/13th-month/export")
+@admin_required
+def export_thirteenth_month():
+    year = request.args.get("year", type=int) or date.today().year
+    sync_thirteenth_month_records(year)
+    records = ThirteenthMonthRecord.query.filter_by(year=year).join(Employee).order_by(Employee.last_name.asc(), Employee.first_name.asc()).all()
+    wb = Workbook(); ws = wb.active; ws.title = "13th Month"
+    ws.append([f"13th Month Pay Tracker - {year}"])
+    ws.append([])
+    ws.append(["Employee Name", "Employee ID", "Basic Salary Earned", "13th Month", "Status", "Due Date", "Paid Date", "Payment Reference"])
+    for c in ws[3]: c.font = Font(bold=True)
+    for r in records:
+        ws.append([f"{r.employee.first_name} {r.employee.last_name}".strip(), r.employee.employee_id,
+                   r.basic_salary_earned or 0, r.thirteenth_amount or 0, r.status,
+                   r.due_date, r.paid_date, r.payment_reference or ""])
+    for row in ws.iter_rows(min_row=4, min_col=3, max_col=4):
+        for c in row: c.number_format = '₱#,##0.00'
+    ws.freeze_panes = "A4"
+    for i,w in enumerate([30,18,22,18,15,15,15,25],1): ws.column_dimensions[get_column_letter(i)].width=w
+    out=BytesIO(); wb.save(out); out.seek(0)
+    return send_file(out, as_attachment=True, download_name=f"13th_month_tracker_{year}.xlsx",
+                     mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 @app.route("/payroll/settings", methods=["GET", "POST"])
 @admin_required

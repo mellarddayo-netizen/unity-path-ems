@@ -17,3 +17,5 @@ from .commission import CommissionRecord
 
 from .expense import Expense
 from .income import FinancialIncome
+
+from .thirteenth_month import ThirteenthMonthRecord

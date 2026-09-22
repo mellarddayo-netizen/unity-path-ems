@@ -2,13 +2,11 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>13th Month Report</title>
+<title>13th Month Pay Tracker</title>
 <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 <style>
-.filter-bar{display:flex;gap:10px;align-items:end;margin-bottom:18px;flex-wrap:wrap}
-.filter-bar label{font-weight:600;font-size:13px;display:block;margin-bottom:5px}
-.filter-bar select{min-width:120px;padding:8px;border:1px solid #ccd3df;border-radius:5px}
-.info-box{background:#eef6ff;border:1px solid #b9d7ff;padding:10px 12px;border-radius:5px;margin-bottom:16px;font-size:13px}
+.toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px}.toolbar .btn{cursor:pointer}.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px}.stat{background:#fff;border-radius:10px;padding:16px;box-shadow:0 2px 10px rgba(0,0,0,.06)}.stat h3{margin:0 0 8px;font-size:14px}.stat .amount{font-size:22px;font-weight:700}.pending-stat{border:1px solid #e0a100}.paid-stat{border:1px solid #17945b}.filter-row input,.filter-row select{width:100%;box-sizing:border-box;padding:7px;border:1px solid #ccd3df;border-radius:4px;font-size:12px}.filter-row th{padding:6px}.badge-paid{background:#dff5e8;color:#157347;padding:4px 8px;border-radius:12px;font-size:12px;font-weight:700}.badge-pending{background:#fff0c2;color:#795b00;padding:4px 8px;border-radius:12px;font-size:12px;font-weight:700}.small-note{font-size:12px;color:#666}.bulk-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.bulk-actions input{padding:7px;border:1px solid #ccd3df;border-radius:4px}.bulk-actions button:disabled{opacity:.5;cursor:not-allowed}.right{text-align:right}
+@media(max-width:900px){.stats{grid-template-columns:repeat(2,1fr)}}
 </style>
 </head>
 <body>
@@ -30,25 +28,89 @@
 
 <div class="main">
 <div class="page-header">
-<div>
-<h1>13th Month Report</h1>
-<p>Basic pay earned ÷ 12</p>
+<div><h1>13th Month Pay Tracker</h1><p>Accumulated 13th month pay based on basic salary actually earned during the selected calendar year.</p></div>
 </div>
-</div>
+
 <div class="card">
-<form method="get" class="filter-bar">
-<div><label for="year">Year</label><select name="year" id="year">
-{% for y in range(year-2, year+3) %}<option value="{{ y }}" {% if y == year %}selected{% endif %}>{{ y }}</option>{% endfor %}
-</select></div>
-<button type="submit" class="btn btn-primary">View Report</button>
+<form method="get" class="toolbar">
+    <div><label style="font-weight:600;font-size:13px;display:block;margin-bottom:5px">Year</label>
+        <select name="year" style="padding:8px;border:1px solid #ccd3df;border-radius:5px;min-width:120px">
+        {% for y in range(year-2, year+3) %}<option value="{{ y }}" {% if y == year %}selected{% endif %}>{{ y }}</option>{% endfor %}
+        </select>
+    </div>
+    <button type="submit" class="btn primary">View Year</button>
+    <a class="btn" href="{{ url_for('export_thirteenth_month', year=year) }}">Export Excel</a>
 </form>
-<div class="info-box">The report uses basic pay earned from payroll records for the selected calendar year. Draft, Approved, and Paid payrolls are included; allowances, incentives, overtime, and statutory deductions are excluded.</div>
-<div class="table-container"><table><thead><tr><th>Employee</th><th>Basic Pay Earned</th><th>13th Month</th></tr></thead>
-<tbody>{% for r in rows %}<tr><td>{{ r.employee.first_name }} {{ r.employee.last_name }}</td>
-<td>₱{{ "{:,.2f}".format(r.basic) }}</td><td><b>₱{{ "{:,.2f}".format(r.thirteenth) }}</b></td></tr>
-{% else %}<tr><td colspan="3">No employees.</td></tr>{% endfor %}</tbody>
-<tfoot><tr><th>TOTAL</th><th>₱{{ "{:,.2f}".format(total_basic) }}</th><th>₱{{ "{:,.2f}".format(total_thirteenth) }}</th></tr></tfoot>
-</table></div>
+<div class="small-note">Active employees are tracked as Regular Year-end. Resigned/separated employees are tracked as Separated – Pro-rated through their separation date. Status below is the actual 13th-month payment status.</div>
 </div>
+
+<div class="stats">
+    <div class="stat"><h3>Total Basic Salary Earned</h3><div class="amount">₱{{ "{:,.2f}".format(total_basic) }}</div></div>
+    <div class="stat"><h3>Total 13th Month</h3><div class="amount">₱{{ "{:,.2f}".format(total_thirteenth) }}</div></div>
+    <div class="stat paid-stat"><h3>Paid</h3><div class="amount">₱{{ "{:,.2f}".format(paid_total) }}</div></div>
+    <div class="stat pending-stat"><h3>Pending</h3><div class="amount">₱{{ "{:,.2f}".format(pending_total) }}</div></div>
 </div>
+
+<form method="post" id="bulk13Form">
+<input type="hidden" name="year" value="{{ year }}">
+<div class="card" style="margin-bottom:12px">
+    <div class="bulk-actions">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="select_all_filtered" onchange="toggleFiltered(this)"><b>Select All Filtered</b></label>
+        <input type="date" name="paid_date" value="{{ today.isoformat() }}" title="Paid date">
+        <input type="text" name="payment_reference" placeholder="Payment reference (optional)">
+        <button class="btn primary" type="submit" name="action" value="mark_paid" id="mark_paid_btn" disabled>Mark as Paid</button>
+        <button class="btn" type="submit" name="action" value="mark_pending" id="mark_pending_btn" disabled>Return to Pending</button>
+        <span id="selected_count" class="small-note"></span>
+    </div>
+    <div class="small-note" style="margin-top:8px">Select records from the currently filtered/visible rows. Paid records can be returned to Pending if marked incorrectly.</div>
+</div>
+
+<div class="card table-container">
+<table id="thirteenthTable">
+<thead>
+<tr><th>Select</th><th>Employee</th><th>Employee ID</th><th>Employment Status</th><th>Separation Date</th><th>Basic Salary Earned</th><th>13th Month</th><th>Due Date</th><th>Status</th><th>Paid Date</th><th>Payment Reference</th></tr>
+<tr class="filter-row">
+<th></th>
+<th><input class="col-filter" data-col="1" placeholder="Filter employee"></th>
+<th><input class="col-filter" data-col="2" placeholder="Filter ID"></th>
+<th><select class="col-filter" data-col="3"><option value="">All</option><option>Active</option><option>Resigned</option><option>Separated</option><option>Inactive</option></select></th>
+<th><input class="col-filter" data-col="4" placeholder="Filter date"></th>
+<th><input class="col-filter" data-col="5" placeholder="Filter basic"></th>
+<th><input class="col-filter" data-col="6" placeholder="Filter 13th month"></th>
+<th><input class="col-filter" data-col="7" placeholder="Filter due date"></th>
+<th><select class="col-filter" data-col="8"><option value="">All Status</option><option>Pending</option><option>Paid</option></select></th>
+<th><input class="col-filter" data-col="9" placeholder="Filter paid date"></th>
+<th><input class="col-filter" data-col="10" placeholder="Filter reference"></th>
+</tr>
+</thead>
+<tbody>
+{% for r in records %}
+<tr>
+<td><input type="checkbox" class="bulk-check" name="record_ids" value="{{ r.id }}" onchange="updateSelection()"></td>
+<td><b>{{ r.employee.first_name }} {{ r.employee.last_name }}</b></td>
+<td>{{ r.employee.employee_id }}</td>
+<td>{{ r.employee.employment_status or 'Active' }}</td>
+<td>{{ r.employee.separation_date.strftime('%b %d, %Y') if r.employee.separation_date else '—' }}</td>
+<td>₱{{ "{:,.2f}".format(r.basic_salary_earned or 0) }}</td>
+<td><b>₱{{ "{:,.2f}".format(r.thirteenth_amount or 0) }}</b></td>
+<td>{{ r.due_date.strftime('%b %d, %Y') if r.due_date else '—' }}</td>
+<td>{% if r.status == 'Paid' %}<span class="badge-paid">Paid</span>{% else %}<span class="badge-pending">Pending</span>{% endif %}</td>
+<td>{{ r.paid_date.strftime('%b %d, %Y') if r.paid_date else '—' }}</td>
+<td>{{ r.payment_reference or '—' }}</td>
+</tr>
+{% else %}<tr><td colspan="11">No employee records found for {{ year }}.</td></tr>{% endfor %}
+</tbody>
+<tfoot><tr><th colspan="5">TOTAL</th><th>₱{{ "{:,.2f}".format(total_basic) }}</th><th>₱{{ "{:,.2f}".format(total_thirteenth) }}</th><th colspan="4"></th></tr></tfoot>
+</table>
+</div>
+</form>
+</div>
+<script>
+function checks(){return Array.from(document.querySelectorAll('.bulk-check'));}
+function visibleChecks(){return checks().filter(c=>{const r=c.closest('tr');return r&&r.style.display!=='none';});}
+function updateSelection(){const all=checks(),sel=all.filter(c=>c.checked),vis=visibleChecks();document.getElementById('selected_count').textContent=sel.length?sel.length+' selected':'';document.getElementById('mark_paid_btn').disabled=!sel.length;document.getElementById('mark_pending_btn').disabled=!sel.length;const a=document.getElementById('select_all_filtered');a.checked=vis.length>0&&vis.every(c=>c.checked);a.indeterminate=vis.some(c=>c.checked)&&!a.checked;}
+function toggleFiltered(src){visibleChecks().forEach(c=>c.checked=src.checked);updateSelection();}
+function applyFilters(){const filters=Array.from(document.querySelectorAll('.col-filter'));document.querySelectorAll('#thirteenthTable tbody tr').forEach(row=>{let show=true;filters.forEach(f=>{const q=(f.value||'').toLowerCase().trim();if(!q)return;const cell=row.cells[Number(f.dataset.col)];if(!cell)return;show=show&&(cell.textContent||'').toLowerCase().includes(q);});row.style.display=show?'':'none';});updateSelection();}
+document.querySelectorAll('.col-filter').forEach(f=>f.addEventListener('input',applyFilters));document.querySelectorAll('.col-filter').forEach(f=>f.addEventListener('change',applyFilters));
+</script>
 </body></html>
