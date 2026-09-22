@@ -1707,6 +1707,10 @@ def expense_report():
 
     sync_contribution_expenses(year, month)
     sync_payroll_salary_expenses(year, month)
+    # Keep 13th Month Tracker and financial expense records synchronized even
+    # when the admin opens Expense Trackers directly.
+    sync_thirteenth_month_records(year)
+    sync_thirteenth_month_expenses(year)
     start = date(year, month, 1)
     end = date(year + 1, 1, 1) if month == 12 else date(year, month + 1, 1)
     view = request.args.get("view", "other")
@@ -1975,6 +1979,11 @@ def financial_summary():
     cleanup_orphan_financial_records(year, month)
     sync_contribution_expenses(year, month)
     sync_payroll_salary_expenses(year, month)
+    # 13th Month is a real company expense source. Synchronize it before the
+    # monthly financial query so Pending/Paid amounts are reflected without
+    # requiring the admin to visit the 13th Month page first.
+    sync_thirteenth_month_records(year)
+    sync_thirteenth_month_expenses(year)
 
     expenses = Expense.query.filter(
         Expense.expense_date >= start, Expense.expense_date < end
@@ -2285,6 +2294,10 @@ def dashboard():
     total_payroll = Payroll.query.count()
     sync_contribution_expenses_all_months()
     sync_payroll_salary_expenses()
+    # Keep all current-year 13th Month records mirrored into expenses so the
+    # overall dashboard Pending/Paid totals stay synchronized.
+    sync_thirteenth_month_records(date.today().year)
+    sync_thirteenth_month_expenses(date.today().year)
     income_total = round(sum(float(r.total_collection or 0) for r in CommissionRecord.query.all()), 2)
     commission_total = round(sum(float(r.commission or 0) for r in CommissionRecord.query.all()), 2)
     expenses = Expense.query.all()
