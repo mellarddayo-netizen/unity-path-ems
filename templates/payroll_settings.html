@@ -4,6 +4,22 @@
     <meta charset="UTF-8">
     <title>Payroll Settings</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        .statutory-card { margin-top: 22px; }
+        .statutory-card h3 { margin: 0 0 8px; }
+        .statutory-note { color: #4b5563; font-size: 14px; margin: 6px 0 14px; }
+        .statutory-table-wrap { overflow-x: auto; max-height: 620px; overflow-y: auto; border: 1px solid #e5e7eb; border-radius: 8px; }
+        .statutory-table { min-width: 980px; font-size: 13px; }
+        .statutory-table th { position: sticky; top: 0; z-index: 2; white-space: nowrap; }
+        .statutory-table td { white-space: nowrap; }
+        .statutory-table .money { text-align: right; }
+        .mini-table { font-size: 14px; }
+        .mini-table th, .mini-table td { padding: 9px 10px; }
+        details.statutory-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 9px; padding: 0; }
+        details.statutory-card > summary { cursor: pointer; padding: 16px 18px; font-weight: 700; font-size: 18px; list-style-position: inside; }
+        details.statutory-card[open] > summary { border-bottom: 1px solid #e5e7eb; }
+        .statutory-content { padding: 0 18px 18px; }
+    </style>
 </head>
 <body>
 <div class="sidebar">
@@ -12,7 +28,7 @@
     <details class="side-group"><summary>Employee Management</summary><div class="side-submenu">
         <a href="{{ url_for('employees') }}">Employees</a><a href="{{ url_for('attendance') }}">Attendance</a><a href="{{ url_for('calendar_view') }}">Calendar</a><a href="{{ url_for('admin_leave_requests') }}">Leave Requests</a>
     </div></details>
-    <details class="side-group"><summary>Payroll &amp; Benefits</summary><div class="side-submenu">
+    <details class="side-group" open><summary>Payroll &amp; Benefits</summary><div class="side-submenu">
         <a href="{{ url_for('payroll') }}">Payroll</a><a href="{{ url_for('loans') }}">Loan Management</a><a href="{{ url_for('loan_report') }}">Loan Report</a><a href="{{ url_for('payroll_settings') }}">Payroll Settings</a><a href="{{ url_for('payroll_contributions') }}">Contribution Shares</a><a href="{{ url_for('thirteenth_month_report') }}">13th Month</a>
     </div></details>
     <details class="side-group"><summary>Financial Reports</summary><div class="side-submenu">
@@ -35,21 +51,94 @@
 
             <h2>Automatic Philippine Statutory Deductions</h2>
             <div class="info-box">
-                SSS, PhilHealth, Pag-IBIG and BIR withholding tax are now calculated automatically by the payroll engine.
-                Do not enter flat percentage rates here. The engine uses the current statutory tables/rules configured in the application.
+                Payroll uses the statutory tables shown below as its source of truth. The rates and brackets are not entered as flat percentages here.
+                The SSS table is the Business Employers and Employees schedule effective January 2025; PhilHealth is the CY 2025 premium schedule; and Pag-IBIG uses the current membership contribution rates with a maximum monthly compensation basis of ₱5,000.
             </div>
             <div class="form-grid">
-                <div><label>SSS Employee Rate</label><input value="5% of MSC (2025 schedule)" disabled></div>
-                <div><label>PhilHealth Employee Share</label><input value="50% of 5% premium; floor ₱10,000 / ceiling ₱100,000" disabled></div>
-                <div><label>Pag-IBIG Employee Rate</label><input value="1% / 2%; max fund salary ₱5,000" disabled></div>
+                <div><label>SSS</label><input value="Exact 2025 compensation → MSC table; 5% EE / 10% ER + EC + MPF where applicable" disabled></div>
+                <div><label>PhilHealth</label><input value="5% of Monthly Basic Salary; ₱10,000 floor / ₱100,000 ceiling; 50/50" disabled></div>
+                <div><label>Pag-IBIG</label><input value="1% EE up to ₱1,500; 2% EE over ₱1,500; 2% ER; max basis ₱5,000" disabled></div>
                 <div><label>BIR Withholding Tax</label><input value="Semi-monthly Annex E table" disabled></div>
             </div>
             <div class="info-box">
-                For partial attendance/pay, the monthly statutory obligation is calculated from the employee's Basic Daily Rate × working days/month, then prorated to the actual gross paid in the cutoff. This prevents a short payroll from taking a full monthly contribution.
+                The payroll engine determines the monthly statutory bases first, then looks up the applicable table/rule. SSS uses total actual remuneration; PhilHealth uses fixed Monthly Basic Salary and excludes overtime, allowances, 13th-month pay, bonuses and deductions caused by undertime/tardiness/leave without pay/absences; Pag-IBIG uses monthly compensation capped at ₱5,000.
             </div>
             <button class="btn primary" type="submit">Save Settings</button>
         </form>
     </div>
+
+    <details class="statutory-card" open>
+        <summary>SSS Contribution Table — Business Employers &amp; Employees (Effective January 2025)</summary>
+        <div class="statutory-content">
+            <p class="statutory-note">The payroll uses this exact compensation-to-MSC mapping. Employee total includes Regular SS + MPF; employer total includes Regular SS + MPF + EC.</p>
+            <div class="statutory-table-wrap">
+                <table class="statutory-table">
+                    <thead>
+                        <tr>
+                            <th rowspan="2">Range of Compensation</th>
+                            <th rowspan="2">MSC</th>
+                            <th colspan="4">Employer</th>
+                            <th colspan="3">Employee</th>
+                        </tr>
+                        <tr>
+                            <th>Regular SS</th><th>MPF</th><th>EC</th><th>Total</th>
+                            <th>Regular SS</th><th>MPF</th><th>Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    {% for row in sss_table %}
+                        <tr>
+                            <td>{{ row.range }}</td>
+                            <td class="money">₱{{ '{:,.2f}'.format(row.msc) }}</td>
+                            <td class="money">₱{{ '{:,.2f}'.format(row.regular_ss_er) }}</td>
+                            <td class="money">₱{{ '{:,.2f}'.format(row.mpf_er) }}</td>
+                            <td class="money">₱{{ '{:,.2f}'.format(row.ec) }}</td>
+                            <td class="money"><strong>₱{{ '{:,.2f}'.format(row.employer_total) }}</strong></td>
+                            <td class="money">₱{{ '{:,.2f}'.format(row.regular_ss_ee) }}</td>
+                            <td class="money">₱{{ '{:,.2f}'.format(row.mpf_ee) }}</td>
+                            <td class="money"><strong>₱{{ '{:,.2f}'.format(row.employee_total) }}</strong></td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </details>
+
+    <details class="statutory-card" open>
+        <summary>PhilHealth Premium Contribution Table — CY 2025</summary>
+        <div class="statutory-content">
+            <p class="statutory-note">Premium rate: 5.0%. Monthly Basic Salary floor: ₱10,000.00. Ceiling: ₱100,000.00. Employee and employer share the premium equally.</p>
+            <div class="table-container">
+                <table class="mini-table">
+                    <thead><tr><th>Monthly Basic Salary</th><th>Premium Rate</th><th>Monthly Premium</th><th>Employee Share</th><th>Employer Share</th></tr></thead>
+                    <tbody>
+                    {% for row in philhealth_table %}
+                        <tr><td>{{ row.monthly_basic_salary }}</td><td>{{ row.premium_rate }}</td><td>{{ row.monthly_premium }}</td><td>{{ row.employee_share }}</td><td>{{ row.employer_share }}</td></tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <p class="statutory-note">PhilHealth MBS excludes sales commission, overtime pay, allowances, 13th-month pay, bonuses/gratuity, and deductions caused by undertime, tardiness, leave without pay, absences, or similar circumstances.</p>
+        </div>
+    </details>
+
+    <details class="statutory-card" open>
+        <summary>Pag-IBIG Fund Membership Contribution Table</summary>
+        <div class="statutory-content">
+            <p class="statutory-note">Maximum monthly compensation used for mandatory employee and employer contributions: ₱{{ '{:,.2f}'.format(pagibig_max_compensation) }}.</p>
+            <div class="table-container">
+                <table class="mini-table">
+                    <thead><tr><th>Monthly Compensation</th><th>Employee Rate</th><th>Employer Rate</th></tr></thead>
+                    <tbody>
+                    {% for row in pagibig_table %}
+                        <tr><td>{{ row.monthly_compensation }}</td><td>{{ row.employee_rate }}</td><td>{{ row.employer_rate }}</td></tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </details>
 </div>
 </body>
 </html>

@@ -36,6 +36,7 @@ from dotenv import load_dotenv
 from extensions import db
 
 from models import Device, Employee, User, Attendance, Payroll, PayrollSettings, FinalPay, EmployeeLoan, LoanPayment, MonthlyContribution, Holiday, LeaveRequest, CommissionRecord, Expense, FinancialIncome, ThirteenthMonthRecord
+from statutory_tables import (SSS_2025_TABLE, PHILHEALTH_2025_TABLE, PAGIBIG_TABLE, PAGIBIG_MAX_COMPENSATION, sss_msc_from_remuneration, sss_contribution_row)
 
 
 # Standard company attendance schedule
@@ -724,18 +725,8 @@ def _monthly_earnings_basis(employee, year, month):
 
 
 def _sss_msc(actual_remuneration):
-    """Map actual monthly remuneration to the Jan-2025 SSS MSC schedule.
-
-    For employed members, SSS states that MSC is based on total actual
-    remuneration from employment. The 2025 schedule uses a P5,000 minimum,
-    P35,000 maximum and P500 increments.
-    """
-    compensation = max(0.0, float(actual_remuneration or 0))
-    if compensation <= 0:
-        return 0.0
-    if compensation <= 5000:
-        return 5000.0
-    return min(35000.0, float(int((compensation + 499.999999) // 500) * 500))
+    """Map remuneration to the exact SSS 2025 compensation/MSC table."""
+    return sss_msc_from_remuneration(actual_remuneration)
 
 
 def get_monthly_contribution_shares(employee, settings, year=None, month=None):
@@ -753,12 +744,10 @@ def get_monthly_contribution_shares(employee, settings, year=None, month=None):
     basis = _monthly_earnings_basis(employee, year, month)
     sss_msc = _sss_msc(basis["sss_remuneration"])
 
-    sss_employee = round(sss_msc * 0.05, 2) if sss_msc else 0.0
-    sss_regular_employer = round(sss_msc * 0.10, 2) if sss_msc else 0.0
-    sss_ec = 0.0
-    if sss_msc:
-        sss_ec = 10.0 if sss_msc <= 14500 else 30.0
-    sss_employer = round(sss_regular_employer + sss_ec, 2)
+    sss_parts = sss_contribution_row(sss_msc)
+    sss_employee = sss_parts["employee_total"]
+    sss_employer = sss_parts["employer_total"]
+    sss_ec = sss_parts["ec"]
 
     ph_basic = max(0.0, float(basis["philhealth_basic_salary"] or 0))
     if ph_basic <= 0:
@@ -789,6 +778,10 @@ def get_monthly_contribution_shares(employee, settings, year=None, month=None):
         "sss_employee": sss_employee,
         "sss_employer": sss_employer,
         "sss_ec": sss_ec,
+        "sss_regular_employer": sss_parts["regular_ss_er"],
+        "sss_mpf_employer": sss_parts["mpf_er"],
+        "sss_regular_employee": sss_parts["regular_ss_ee"],
+        "sss_mpf_employee": sss_parts["mpf_ee"],
         "philhealth_employee": philhealth_employee,
         "philhealth_employer": philhealth_employer,
         "pagibig_employee": pagibig_employee,
@@ -5368,7 +5361,11 @@ def payroll_settings():
 
     return render_template(
         "payroll_settings.html",
-        settings=settings
+        settings=settings,
+        sss_table=SSS_2025_TABLE,
+        philhealth_table=PHILHEALTH_2025_TABLE,
+        pagibig_table=PAGIBIG_TABLE,
+        pagibig_max_compensation=PAGIBIG_MAX_COMPENSATION,
     )
 
 
