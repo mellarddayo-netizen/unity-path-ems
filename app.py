@@ -52,6 +52,12 @@ DB_PATH = os.path.join(BASE_DIR, "employee_system_v10.db")
 DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = "postgresql://" + DATABASE_URL[len("postgres://"):]
+# Pin the PostgreSQL DBAPI explicitly so SQLAlchemy version changes cannot
+# silently switch drivers. SQLAlchemy 2.1 uses psycopg (Psycopg 3) for the
+# plain postgresql:// URL by default; the dependency is declared in
+# requirements.txt as psycopg[binary].
+if DATABASE_URL.startswith("postgresql://"):
+    DATABASE_URL = "postgresql+psycopg://" + DATABASE_URL[len("postgresql://"):]
 PROFILE_STORAGE_DIR = os.getenv("PROFILE_STORAGE_DIR", "").strip()
 PROFILE_DIR = PROFILE_STORAGE_DIR or os.path.join(BASE_DIR, "static", "uploads", "profiles")
 
